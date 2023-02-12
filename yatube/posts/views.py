@@ -6,7 +6,7 @@ from django.views.decorators.cache import cache_page
 
 from core.utils import paginate
 from posts.forms import CommentForm, PostForm
-from posts.models import Comment, Follow, Group, Post
+from posts.models import Follow, Group, Post
 
 User = get_user_model()
 
