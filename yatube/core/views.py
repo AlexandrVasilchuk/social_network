@@ -8,4 +8,4 @@ def page_not_found(request: HttpRequest, exception) -> HttpResponse:
 
 
 def csrf_failure(request: HttpRequest, reason: str = '') -> HttpResponse:
-    return render(request, 'core/403csrf.html')
+    return render(request, 'core/403csrf.html', status=403)
