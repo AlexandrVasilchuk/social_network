@@ -116,4 +116,4 @@ LOGIN_REDIRECT_URL = 'posts:index'
 
 DEFAULT_AUTO_FIELD = 'django.db.models.BigAutoField'
 
-CSRF_FAILURE_VIEW = 'core.views.crf_failure'
+CSRF_FAILURE_VIEW = 'core.views.csrf_failure'
