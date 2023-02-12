@@ -63,15 +63,15 @@ class PostURLTest(TestCase):
                 f'/posts/{PostURLTest.post.pk}/comment/', follow=True
             ): f'/auth/login/?next=/posts/{PostURLTest.post.pk}/comment/',
             self.client.get(
-                f'/follow/', follow=True
-            ): f'/auth/login/?next=/follow/',
+                '/follow/', follow=True
+            ): '/auth/login/?next=/follow/',
         }
         for value, expected in response_values.items():
             with self.subTest(value=value):
                 self.assertRedirects(
                     value,
                     expected,
-                    msg_prefix=f'Редирект для {expected} работает неправильно!',
+                    msg_prefix=f'Редирект для {expected} не работает!',
                 )
 
     def test_available_allowed_pages(self) -> None:
