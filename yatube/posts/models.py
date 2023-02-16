@@ -37,7 +37,7 @@ class Post(AbstractedModel):
         blank=True,
     )
 
-    class Meta:
+    class Meta(AbstractedModel.Meta):
         verbose_name = 'пост'
         verbose_name_plural = 'посты'
         default_related_name = 'posts'
@@ -56,7 +56,7 @@ class Comment(AbstractedModel):
         on_delete=models.CASCADE,
     )
 
-    class Meta:
+    class Meta(AbstractedModel.Meta):
         verbose_name = 'комментарий'
         verbose_name_plural = 'комментарии'
         default_related_name = 'comments'
