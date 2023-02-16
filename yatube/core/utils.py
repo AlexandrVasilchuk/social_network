@@ -1,13 +1,17 @@
+from typing import Any
+
 from django.conf import settings
-from django.core.paginator import Paginator
+from django.core.paginator import Page, Paginator
+from django.db.models.query import QuerySet
 from django.http import HttpRequest
 
 
 def paginate(
     request: HttpRequest,
-    queryset: str,
+    queryset: QuerySet,
     pagesize: int = settings.PAGE_SIZE,
-) -> str:
-    paginator = Paginator(queryset, pagesize)
-    page_number = request.GET.get('page')
-    return paginator.get_page(page_number)
+) -> Page[Any]:
+    return Paginator(
+        queryset,
+        pagesize,
+    ).get_page(request.GET.get('page'))

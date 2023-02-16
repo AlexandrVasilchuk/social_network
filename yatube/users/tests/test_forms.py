@@ -14,7 +14,7 @@ class TestUsersForm(TestCase):
         self.guest_client = Client()
 
     def test_sign_in_form(self) -> None:
-        """Проверка создания нового пользователя через форму"""
+        """Проверка создания нового пользователя через форму."""
         form_data = {
             'first_name': 'Alexandr',
             'last_name': 'Vasilchuk',

@@ -1,6 +1,8 @@
 from django.contrib.auth import get_user_model
 from django.db import models
 
+from yatube.models import AbstractedModel
+
 User = get_user_model()
 
 POST_SYMBOLS_LIMITATION = 15
@@ -13,13 +15,11 @@ class Group(models.Model):
     slug = models.SlugField('имя группы', unique=True)
     description = models.TextField('описание')
 
-    def __str__(self) -> models.CharField:
+    def __str__(self) -> str:
         return self.title
 
 
-class Post(models.Model):
-    text = models.TextField('текст поста', help_text='Текст нового поста')
-    pub_date = models.DateTimeField('время публикации', auto_now_add=True)
+class Post(AbstractedModel):
     author = models.ForeignKey(
         User,
         on_delete=models.CASCADE,
@@ -30,7 +30,6 @@ class Post(models.Model):
         null=True,
         on_delete=models.SET_NULL,
         verbose_name='группа',
-        help_text='Группа, к которой будет относиться пост',
     )
     image = models.ImageField(
         'картинка',
@@ -41,46 +40,41 @@ class Post(models.Model):
     class Meta:
         verbose_name = 'пост'
         verbose_name_plural = 'посты'
-        ordering = ('-pub_date',)
         default_related_name = 'posts'
 
     def __str__(self) -> str:
         return self.text[:POST_SYMBOLS_LIMITATION]
 
 
-class Comment(models.Model):
+class Comment(AbstractedModel):
     post = models.ForeignKey(
         Post,
         on_delete=models.CASCADE,
-    )
-    text = models.TextField(
-        'комментарий',
-        help_text='Оставьте свой комментарий',
     )
     author = models.ForeignKey(
         User,
         on_delete=models.CASCADE,
     )
-    created = models.DateTimeField('время комментария', auto_now_add=True)
 
     class Meta:
-        ordering = ('-created',)
         verbose_name = 'комментарий'
         verbose_name_plural = 'комментарии'
         default_related_name = 'comments'
 
-    def __str__(self):
+    def __str__(self) -> str:
         return self.text
 
 
 class Follow(models.Model):
     user = models.ForeignKey(
         User,
+        verbose_name='подписчик',
         related_name='follower',
         on_delete=models.CASCADE,
     )
     author = models.ForeignKey(
         User,
+        verbose_name='автор',
         related_name='following',
         on_delete=models.CASCADE,
     )
@@ -88,7 +82,8 @@ class Follow(models.Model):
     class Meta:
         constraints = [
             models.UniqueConstraint(
-                fields=['user', 'author'], name='unique_author'
+                fields=['user', 'author'],
+                name='unique_author',
             ),
         ]
 

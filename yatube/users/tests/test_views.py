@@ -11,28 +11,26 @@ class TestUsersViews(TestCase):
     def setUpClass(cls) -> None:
         super().setUpClass()
         cls.user = User.objects.create_user(username='auth')
-
-    def setUp(self) -> None:
-        self.authorized_client = Client()
-        self.authorized_client.force_login(TestUsersViews.user)
+        cls.authorized_client = Client()
+        cls.authorized_client.force_login(TestUsersViews.user)
 
     def test_correct_templates(self) -> None:
-        """Проверка использования правильных шаблонов через namespace:name"""
+        """Проверка использования правильных шаблонов через namespace:name."""
         response_expected = {
             reverse(
-                'users:password_change_form'
+                'users:password_change_form',
             ): 'users/password_change.html',
             reverse(
-                'users:password_change_done'
+                'users:password_change_done',
             ): 'users/password_change_done.html',
             reverse(
-                'users:password_reset_form'
+                'users:password_reset_form',
             ): 'users/password_reset_form.html',
             reverse(
-                'users:password_reset_complete'
+                'users:password_reset_complete',
             ): 'users/password_reset_complete.html',
             reverse(
-                'users:password_reset_done'
+                'users:password_reset_done',
             ): 'users/password_reset_done.html',
             reverse(
                 'users:password_reset_confirm',
@@ -52,7 +50,7 @@ class TestUsersViews(TestCase):
                 )
 
     def test_context(self) -> None:
-        """Проверка правильности контекста для signup"""
+        """Проверка правильности контекста для signup."""
         response = self.authorized_client.get(reverse('users:signup'))
         form_fields = {
             'first_name': forms.fields.CharField,
@@ -63,5 +61,6 @@ class TestUsersViews(TestCase):
         for value, expected in form_fields.items():
             with self.subTest(field=value):
                 self.assertIsInstance(
-                    response.context['form'].fields[value], expected
+                    response.context['form'].fields[value],
+                    expected,
                 )

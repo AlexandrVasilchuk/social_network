@@ -3,10 +3,11 @@ from django.contrib.auth import get_user_model
 from django.core.cache import cache
 from django.test import Client, TestCase
 from django.urls import reverse
-
-from posts.models import Group, Post
+from mixer.backend.django import mixer
 
 User = get_user_model()
+
+AMMOUNT_OBJECTS = 13
 
 
 class PaginatorViewsTest(TestCase):
@@ -14,18 +15,12 @@ class PaginatorViewsTest(TestCase):
     def setUpClass(cls) -> None:
         super().setUpClass()
         cls.user = User.objects.create_user(username='auth')
-        cls.group = Group.objects.create(
-            title='Тестовая группа',
-            slug='test_slug',
-            description='Тестовое описание',
+        cls.group = mixer.blend('posts.Group')
+        mixer.cycle(AMMOUNT_OBJECTS).blend(
+            'posts.Post',
+            author=PaginatorViewsTest.user,
+            group=PaginatorViewsTest.group,
         )
-        for txt in range(1, 14):
-            Post.objects.create(
-                author=PaginatorViewsTest.user,
-                group=PaginatorViewsTest.group,
-                text=f'Тестовый пост номер {txt}',
-            )
-        cls.amount_objects = txt
 
     def setUp(self) -> None:
         self.authorized_client = Client()
@@ -33,11 +28,11 @@ class PaginatorViewsTest(TestCase):
         cache.clear()
 
     def test_paginator_separator(self) -> None:
-        """Проверка корректного разделения постов паджинатором"""
+        """Проверка корректного разделения постов паджинатором."""
         response_values = {
             reverse('posts:index'): settings.PAGE_SIZE,
             reverse('posts:index')
-            + '?page=2': PaginatorViewsTest.amount_objects
+            + '?page=2': AMMOUNT_OBJECTS
             - settings.PAGE_SIZE,
             reverse(
                 'posts:group_list',
@@ -47,7 +42,7 @@ class PaginatorViewsTest(TestCase):
                 'posts:group_list',
                 kwargs={'slug': PaginatorViewsTest.group.slug},
             )
-            + '?page=2': PaginatorViewsTest.amount_objects
+            + '?page=2': AMMOUNT_OBJECTS
             - settings.PAGE_SIZE,
             reverse(
                 'posts:profile',
@@ -57,7 +52,7 @@ class PaginatorViewsTest(TestCase):
                 'posts:profile',
                 kwargs={'username': PaginatorViewsTest.user.username},
             )
-            + '?page=2': PaginatorViewsTest.amount_objects
+            + '?page=2': AMMOUNT_OBJECTS
             - settings.PAGE_SIZE,
         }
 
@@ -67,7 +62,7 @@ class PaginatorViewsTest(TestCase):
                     len(
                         (self.authorized_client.get(response)).context[
                             'page_obj'
-                        ]
+                        ],
                     ),
                     value,
                 )

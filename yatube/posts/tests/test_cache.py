@@ -16,21 +16,30 @@ class TestCache(TestCase):
 
     def setUp(self) -> None:
         self.authorized_client = Client()
-        self.authorized_client.force_login(TestCache.user)
+        self.authorized_client.force_login(self.user)
 
     def test_index_cache(self) -> None:
-        """Проверка доступности кеша index"""
+        """Проверка доступности кеша index."""
         new_post = Post.objects.create(
-            author=TestCache.user,
+            author=self.user,
             text='1',
         )
-        response = self.authorized_client.get(reverse('posts:index'))
-        response_content_1 = response.content
+        response_before_deleting = self.authorized_client.get(
+            reverse('posts:index'),
+        )
         new_post.delete()
-        response_2 = self.authorized_client.get(reverse('posts:index'))
-        response_content_2 = response_2.content
-        self.assertEqual(response_content_1, response_content_2)
+        response_after_deleting = self.authorized_client.get(
+            reverse('posts:index'),
+        )
+        self.assertEqual(
+            response_before_deleting.content,
+            response_after_deleting.content,
+        )
         cache.clear()
-        response_3 = self.authorized_client.get(reverse('posts:index'))
-        response_content_3 = response_3.content
-        self.assertNotEqual(response_content_2, response_content_3)
+        response_after_cleaning_cahe = self.authorized_client.get(
+            reverse('posts:index'),
+        )
+        self.assertNotEqual(
+            response_after_deleting.content,
+            response_after_cleaning_cahe.content,
+        )

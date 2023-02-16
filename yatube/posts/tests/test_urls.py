@@ -1,10 +1,11 @@
 from http import HTTPStatus
 
 from django.contrib.auth import get_user_model
+from django.contrib.auth.views import redirect_to_login
 from django.core.cache import cache
 from django.test import Client, TestCase
-
-from posts.models import Group, Post
+from django.urls import reverse
+from mixer.backend.django import mixer
 
 User = get_user_model()
 
@@ -13,115 +14,255 @@ class PostURLTest(TestCase):
     @classmethod
     def setUpClass(cls) -> None:
         super().setUpClass()
-        cls.user = User.objects.create_user(username='auth')
-        cls.group = Group.objects.create(
-            title='Тестовая группа',
-            slug='test_group_slug',
-            description='Тестовое описание',
-        )
-        cls.post = Post.objects.create(
-            author=PostURLTest.user,
+        cls.user = mixer.blend(User)
+        cls.user_author = mixer.blend(User)
+        cls.group = mixer.blend('posts.Group')
+        cls.post = mixer.blend(
+            'posts.Post',
+            author=PostURLTest.user_author,
             group=PostURLTest.group,
-            text='Тестовый пост более 15 символов',
         )
+        cls.authorized_client_author = Client()
+        cls.authorized_client_author.force_login(PostURLTest.user_author)
+        cls.authorized_client_follower = Client()
+        cls.authorized_client_follower.force_login(PostURLTest.user)
+        cls.urls = {
+            'add_comment': reverse(
+                'posts:add_comment',
+                kwargs={'pk': PostURLTest.post.pk},
+            ),
+            'follow_index': reverse('posts:follow_index'),
+            'group_list': reverse(
+                'posts:group_list',
+                kwargs={'slug': PostURLTest.group.slug},
+            ),
+            'post_create': reverse('posts:post_create'),
+            'post_detail': reverse(
+                'posts:post_detail',
+                kwargs={'pk': PostURLTest.post.pk},
+            ),
+            'post_edit': reverse(
+                'posts:post_edit',
+                kwargs={'pk': PostURLTest.post.pk},
+            ),
+            'profile': reverse(
+                'posts:profile',
+                kwargs={'username': PostURLTest.user.username},
+            ),
+            'profile_follow': reverse(
+                'posts:profile_follow',
+                kwargs={'username': PostURLTest.user.username},
+            ),
+            'profile_unfollow': reverse(
+                'posts:profile_unfollow',
+                kwargs={'username': PostURLTest.user.username},
+            ),
+            'index': reverse('posts:index'),
+            'missing': '/non-exists/',
+        }
 
     def setUp(self) -> None:
-        self.authorized_client = Client()
-        self.authorized_client.force_login(PostURLTest.user)
         cache.clear()
 
-    def test_pages_available(self) -> None:
-        """Проверка доступности страниц по указанным адресам для всех"""
-        response_values = {
-            self.client.get(''): HTTPStatus.OK,
-            self.client.get(
-                f'/group/{PostURLTest.group.slug}/'
-            ): HTTPStatus.OK,
-            self.client.get(
-                f'/profile/{PostURLTest.user.username}/'
-            ): HTTPStatus.OK,
-            self.client.get(f'/posts/{PostURLTest.post.pk}/'): HTTPStatus.OK,
-        }
-        for value, expected in response_values.items():
-            with self.subTest(value=value):
-                self.assertEqual(
-                    value.status_code,
-                    expected,
-                    f'Страница {value} не доступна всем по нужному адресу!',
-                )
-
-    def test_redirect_for_anonymous(self) -> None:
-        """Проверка редиректа анонимного пользователя"""
-        response_values = {
-            self.client.get(
-                '/create/', follow=True
-            ): '/auth/login/?next=/create/',
-            self.client.get(
-                f'/posts/{PostURLTest.post.pk}/edit/', follow=True
-            ): f'/auth/login/?next=/posts/{PostURLTest.post.pk}/edit/',
-            self.client.get(
-                f'/posts/{PostURLTest.post.pk}/comment/', follow=True
-            ): f'/auth/login/?next=/posts/{PostURLTest.post.pk}/comment/',
-            self.client.get(
-                '/follow/', follow=True
-            ): '/auth/login/?next=/follow/',
-        }
-        for value, expected in response_values.items():
-            with self.subTest(value=value):
-                self.assertRedirects(
-                    value,
-                    expected,
-                    msg_prefix=f'Редирект для {expected} не работает!',
-                )
-
-    def test_available_allowed_pages(self) -> None:
-        """Проверка доступности страницы для авторизованного"""
-        response_values = {
-            self.authorized_client.get('/create/'): HTTPStatus.OK,
-            self.authorized_client.get('/follow/'): HTTPStatus.OK,
-        }
-        for value, expected in response_values.items():
-            with self.subTest(value=value):
-                self.assertEqual(
-                    value.status_code,
-                    expected,
-                    'Страницы недоступны авторизованным пользователям!',
-                )
-
-    def test_author_available(self) -> None:
-        """Проверка достуности страницы для автора поста"""
-        self.assertEqual(
-            self.authorized_client.get(
-                f'/posts/{PostURLTest.post.pk}/edit/'
-            ).status_code,
-            HTTPStatus.OK,
+    def test_http_statuses(self) -> None:
+        """Соответствие статуса страниц по указанным адресам для всех."""
+        httpstatuses = (
+            (self.urls.get('add_comment'), HTTPStatus.FOUND, self.client),
+            (self.urls.get('follow_index'), HTTPStatus.FOUND, self.client),
+            (self.urls.get('group_list'), HTTPStatus.OK, self.client),
+            (self.urls.get('post_create'), HTTPStatus.FOUND, self.client),
+            (self.urls.get('post_detail'), HTTPStatus.OK, self.client),
+            (self.urls.get('post_edit'), HTTPStatus.FOUND, self.client),
+            (self.urls.get('profile'), HTTPStatus.OK, self.client),
+            (self.urls.get('profile_follow'), HTTPStatus.FOUND, self.client),
+            (self.urls.get('profile_unfollow'), HTTPStatus.FOUND, self.client),
+            (self.urls.get('index'), HTTPStatus.OK, self.client),
+            (self.urls.get('missing'), HTTPStatus.NOT_FOUND, self.client),
+            (
+                self.urls.get('follow_index'),
+                HTTPStatus.OK,
+                self.authorized_client_author,
+            ),
+            (
+                self.urls.get('post_create'),
+                HTTPStatus.OK,
+                self.authorized_client_author,
+            ),
+            (
+                self.urls.get('post_edit'),
+                HTTPStatus.OK,
+                self.authorized_client_author,
+            ),
+            (
+                self.urls.get('missing'),
+                HTTPStatus.NOT_FOUND,
+                self.authorized_client_author,
+            ),
+            (
+                self.urls.get('follow_index'),
+                HTTPStatus.OK,
+                self.authorized_client_follower,
+            ),
+            (
+                self.urls.get('post_create'),
+                HTTPStatus.OK,
+                self.authorized_client_follower,
+            ),
+            (
+                self.urls.get('post_edit'),
+                HTTPStatus.FOUND,
+                self.authorized_client_follower,
+            ),
         )
 
-    def test_redirect_not_author(self) -> None:
-        """Проверка редиректа гостя при попытке изменить пост"""
-        self.not_author = User.objects.create_user(username='_')
-        self.authorized_client.force_login(self.not_author)
-        response = self.authorized_client.get(
-            f'/posts/{PostURLTest.post.pk}/edit/'
-        )
-        value = f'/posts/{PostURLTest.post.pk}/'
-        self.assertRedirects(response, value)
+        for response, expected_status, client in httpstatuses:
+            with self.subTest(value=expected_status):
+                self.assertEqual(
+                    client.get(response).status_code,
+                    expected_status,
+                    f'Страница {response} не доступна по нужному адресу!',
+                )
 
-    def test_template_available(self) -> None:
-        """Проверка обращение по url использует верный шаблон"""
-        response_values = {
-            '': 'posts/index.html',
-            '/create/': 'posts/create_post.html',
-            f'/group/{PostURLTest.group.slug}/': 'posts/group_list.html',
-            f'/posts/{PostURLTest.post.pk}/': 'posts/post_detail.html',
-            f'/posts/{PostURLTest.post.pk}/edit/': 'posts/create_post.html',
-            f'/profile/{PostURLTest.user.username}/': 'posts/profile.html',
-            '/follow/': 'posts/follow.html',
-        }
-        for response, value in response_values.items():
-            with self.subTest(value=value):
+    def test_templates(self) -> None:
+        """Соответствие вызываемого шаблона."""
+        templates = (
+            (
+                self.urls.get('group_list'),
+                'posts/group_list.html',
+                self.client,
+            ),
+            (
+                self.urls.get('post_detail'),
+                'posts/post_detail.html',
+                self.client,
+            ),
+            (self.urls.get('profile'), 'posts/profile.html', self.client),
+            (self.urls.get('index'), 'posts/index.html', self.client),
+            (
+                self.urls.get('follow_index'),
+                'posts/follow.html',
+                self.authorized_client_author,
+            ),
+            (
+                self.urls.get('group_list'),
+                'posts/group_list.html',
+                self.authorized_client_author,
+            ),
+            (
+                self.urls.get('post_create'),
+                'posts/create_post.html',
+                self.authorized_client_author,
+            ),
+            (
+                self.urls.get('post_detail'),
+                'posts/post_detail.html',
+                self.authorized_client_author,
+            ),
+            (
+                self.urls.get('post_edit'),
+                'posts/create_post.html',
+                self.authorized_client_author,
+            ),
+            (
+                self.urls.get('profile'),
+                'posts/profile.html',
+                self.authorized_client_author,
+            ),
+            (
+                self.urls.get('index'),
+                'posts/index.html',
+                self.authorized_client_author,
+            ),
+            (
+                self.urls.get('missing'),
+                'core/404.html',
+                self.authorized_client_author,
+            ),
+            (
+                self.urls.get('follow_index'),
+                'posts/follow.html',
+                self.authorized_client_follower,
+            ),
+            (
+                self.urls.get('post_create'),
+                'posts/create_post.html',
+                self.authorized_client_follower,
+            ),
+        )
+
+        for response, expected_template, client in templates:
+            with self.subTest(value=expected_template):
                 self.assertTemplateUsed(
-                    self.authorized_client.get(response),
-                    value,
-                    f'Открывается неверный шаблон по ссылке {response}!',
+                    client.get(response),
+                    expected_template,
+                    f'Страница {response} не вызывает нужный шаблон!',
+                )
+            cache.clear()
+
+    def test_redirects(self) -> None:
+        """Проверка редиректа для пользователей."""
+        redirects = (
+            (
+                self.urls.get('add_comment'),
+                redirect_to_login(next=self.urls.get('add_comment')).url,
+                self.client,
+            ),
+            (
+                self.urls.get('follow_index'),
+                redirect_to_login(next=self.urls.get('follow_index')).url,
+                self.client,
+            ),
+            (
+                self.urls.get('post_create'),
+                redirect_to_login(next=self.urls.get('post_create')).url,
+                self.client,
+            ),
+            (
+                self.urls.get('post_edit'),
+                redirect_to_login(next=self.urls.get('post_edit')).url,
+                self.client,
+            ),
+            (
+                self.urls.get('profile_follow'),
+                redirect_to_login(next=self.urls.get('profile_follow')).url,
+                self.client,
+            ),
+            (
+                self.urls.get('profile_unfollow'),
+                redirect_to_login(next=self.urls.get('profile_unfollow')).url,
+                self.client,
+            ),
+            (
+                self.urls.get('add_comment'),
+                self.urls.get('post_detail'),
+                self.authorized_client_follower,
+            ),
+            (
+                self.urls.get('post_edit'),
+                self.urls.get('post_detail'),
+                self.authorized_client_follower,
+            ),
+            (
+                self.urls.get('profile_follow'),
+                self.urls.get('follow_index'),
+                self.authorized_client_follower,
+            ),
+            (
+                self.urls.get('add_comment'),
+                self.urls.get('post_detail'),
+                self.authorized_client_author,
+            ),
+            (
+                self.urls.get('profile_follow'),
+                self.urls.get('follow_index'),
+                self.authorized_client_author,
+            ),
+        )
+
+        for response, expected_redirect, client in redirects:
+            with self.subTest(value=expected_redirect):
+                self.assertRedirects(
+                    client.get(response, follow=True),
+                    expected_redirect,
+                    msg_prefix=f'Редирект для {response} не работает!',
                 )

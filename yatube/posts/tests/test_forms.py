@@ -1,15 +1,16 @@
 import shutil
 import tempfile
-from http import HTTPStatus
+from typing import Dict, Union
 
 from django.conf import settings
 from django.contrib.auth import get_user_model
-from django.core.files.uploadedfile import SimpleUploadedFile
+from django.http import HttpResponse
 from django.test import Client, TestCase, override_settings
 from django.urls import reverse
+from mixer.backend.django import mixer
 
-from posts.forms import PostForm
 from posts.models import Comment, Group, Post
+from posts.tests.common import image
 
 User = get_user_model()
 
@@ -21,68 +22,46 @@ class TestPostForm(TestCase):
     @classmethod
     def setUpClass(cls) -> None:
         super().setUpClass()
-        cls.form = PostForm()
-        cls.user = User.objects.create_user(username='auth')
-        cls.group = Group.objects.create(
-            title='Тестовая группа',
-            slug='test_slug',
-            description='Тестовое описание',
-        )
-        cls.post = Post.objects.create(
-            author=TestPostForm.user,
-            text='Пост # 1',
-        )
+        cls.user = User.objects.create_user(username='vsko')
+        cls.authorized_client = Client()
+        cls.authorized_client.force_login(TestPostForm.user)
 
     @classmethod
-    def tearDownClass(cls):
+    def tearDownClass(cls) -> None:
         super().tearDownClass()
         shutil.rmtree(TEMP_MEDIA_ROOT, ignore_errors=True)
 
-    def setUp(self) -> None:
-        self.authorized_client = Client()
-        self.authorized_client.force_login(TestPostForm.user)
-
-    def identification_post(self, response, form_data):
-        """Проверка, что искомый пост = первый пост"""
-        if 'page_obj' in response.context.keys():
-            pk = response.context['page_obj'][0].pk
-        else:
-            pk = response.context['post'].pk
-        self.assertEqual(
-            Post.objects.filter(
-                group=form_data['group'],
-                text=form_data['text'],
-                author=TestPostForm.user.pk,
-                pk=pk,
-            ).exists(),
-            True,
-        )
+    def identification_post(
+        self,
+        response: HttpResponse,
+        form_data: Dict['str', Union[Post, Group, int, str]],
+    ) -> None:
+        """Проверка, что искомый пост = первый пост."""
+        post = Post.objects.get(pk=response.context['post'].pk)
+        value_expected = {
+            post.group.pk: form_data['group'],
+            post.text: form_data['text'],
+            post.author.pk: self.user.pk,
+            post.pk: response.context['post'].pk,
+        }
+        for value, expected in value_expected.items():
+            with self.subTest(value=expected):
+                self.assertEqual(value, expected)
 
     def test_newpost_form(self) -> None:
-        """Проверка добавления записи в БД при отправке валидной формы"""
-        small_gif = (
-            b'\x47\x49\x46\x38\x39\x61\x01\x00'
-            b'\x01\x00\x00\x00\x00\x21\xf9\x04'
-            b'\x01\x0a\x00\x01\x00\x2c\x00\x00'
-            b'\x00\x00\x01\x00\x01\x00\x00\x02'
-            b'\x02\x4c\x01\x00\x3b'
-        )
-        uploaded = SimpleUploadedFile(
-            name='small.gif',
-            content=small_gif,
-            content_type='image/gif',
-        )
-        amount_posts = Post.objects.count()
-        self.assertEqual(Post.objects.count(), amount_posts)
+        """Проверка добавления записи в БД при отправке валидной формы."""
+        group = mixer.blend('posts.Group')
+        self.assertEqual(Post.objects.count(), 0)
         form_data = {
             'text': 'Тестовый пост',
-            'group': TestPostForm.group.pk,
-            'image': uploaded,
+            'group': group.pk,
+            'image': image(),
         }
         response = self.authorized_client.post(
-            reverse('posts:post_create'), data=form_data, follow=True
+            reverse('posts:post_create'),
+            data=form_data,
+            follow=True,
         )
-
         self.assertRedirects(
             response,
             reverse(
@@ -94,40 +73,40 @@ class TestPostForm(TestCase):
             response.context['page_obj'][0].image.name,
             Post.image.field.upload_to + form_data['image'].name,
         )
-        self.assertEqual(Post.objects.count(), amount_posts + 1)
+        self.assertEqual(Post.objects.count(), 1)
         self.identification_post(response, form_data)
 
-    def test_not_valid_form(self) -> None:
-        """Проверка доступности страницы при отправке невалидной формы"""
-        amount_posts = Post.objects.count()
-        self.assertEqual(Post.objects.count(), amount_posts)
-        form_data = {
-            'text': '',
-            'group': TestPostForm.group.pk,
+    def test_help_text_newpost_form(self) -> None:
+        field_expected_value = {
+            'text': 'Текст нового поста',
+            'group': 'Группа, к которой будет относиться пост',
         }
-        response = self.authorized_client.post(
-            reverse('posts:post_create'), data=form_data, follow=True
-        )
-        self.assertFormError(response, 'form', 'text', 'Обязательное поле.')
-        self.assertEqual(Post.objects.filter(text='').exists(), False)
-        self.assertEqual(Post.objects.count(), amount_posts)
-        self.assertEqual(response.status_code, HTTPStatus.OK)
+        for field, expected_value in field_expected_value.items():
+            with self.subTest(value=expected_value):
+                self.assertEqual(
+                    self.authorized_client.get(reverse('posts:post_create'))
+                    .context['form']
+                    .fields[field]
+                    .help_text,
+                    expected_value,
+                )
 
     def test_edit_post(self) -> None:
-        """Проверка работы формы при изменении поста"""
+        """Проверка работы формы при изменении поста."""
+        new_group = mixer.blend('posts.Group')
+        post = mixer.blend('posts.Post', author=self.user)
         form_data = {
-            'text': 'Измененный старый пост',
-            'group': TestPostForm.group.pk,
+            'text': 'Изменённый текст',
+            'group': new_group.pk,
         }
-
         response = self.authorized_client.post(
-            reverse('posts:post_edit', kwargs={'pk': TestPostForm.post.pk}),
+            reverse('posts:post_edit', kwargs={'pk': post.pk}),
             data=form_data,
             follow=True,
         )
         self.assertRedirects(
             response,
-            reverse('posts:post_detail', kwargs={'pk': TestPostForm.post.pk}),
+            reverse('posts:post_detail', kwargs={'pk': post.pk}),
         )
         self.identification_post(response, form_data)
 
@@ -143,15 +122,12 @@ class TestCommentForm(TestCase):
             author=TestCommentForm.user,
             text='Тестовый пост',
         )
-
-    def setUp(self) -> None:
-        self.authorized_client = Client()
-        self.authorized_client.force_login(user=TestCommentForm.user)
+        cls.authorized_client = Client()
+        cls.authorized_client.force_login(user=TestCommentForm.user)
 
     def test_comment_form(self) -> None:
-        """Проверка работы формы добавления комментария и изменения в БД"""
-        ammount_comments = Comment.objects.count()
-        self.assertEqual(ammount_comments, 0)
+        """Проверка работы формы добавления комментария и изменения в БД."""
+        self.assertEqual(Comment.objects.count(), 0)
         form_data = {
             'text': 'Коммент Васи Пупкина',
         }
@@ -159,7 +135,7 @@ class TestCommentForm(TestCase):
             reverse(
                 'posts:add_comment',
                 kwargs={
-                    'post_id': TestCommentForm.post.pk,
+                    'pk': self.post.pk,
                 },
             ),
             data=form_data,
@@ -169,14 +145,14 @@ class TestCommentForm(TestCase):
             reverse(
                 'posts:post_detail',
                 kwargs={
-                    'pk': TestCommentForm.post.pk,
+                    'pk': self.post.pk,
                 },
             ),
         )
         self.assertEqual(
             Comment.objects.filter(
-                author=TestCommentForm.user,
-                post=TestCommentForm.post.pk,
+                author=self.user,
+                post=self.post.pk,
                 text=form_data['text'],
             ).exists(),
             True,
@@ -186,14 +162,14 @@ class TestCommentForm(TestCase):
                 reverse(
                     'posts:post_detail',
                     kwargs={
-                        'pk': TestCommentForm.post.pk,
+                        'pk': self.post.pk,
                     },
-                )
+                ),
             ).context['comments'][0],
             Comment.objects.get(
-                author=TestCommentForm.user,
-                post=TestCommentForm.post.pk,
+                author=self.user,
+                post=self.post.pk,
                 text=form_data['text'],
             ),
         )
-        self.assertEqual(Comment.objects.count(), ammount_comments + 1)
+        self.assertEqual(Comment.objects.count(), 1)

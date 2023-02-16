@@ -5,9 +5,9 @@ from django import forms
 from django.conf import settings
 from django.contrib.auth import get_user_model
 from django.core.cache import cache
-from django.core.files.uploadedfile import SimpleUploadedFile
 from django.test import Client, TestCase, override_settings
 from django.urls import reverse
+from mixer.backend.django import mixer
 
 from posts.models import Comment, Follow, Group, Post
 
@@ -20,37 +20,16 @@ TEMP_MEDIA_ROOT = tempfile.mkdtemp(dir=settings.BASE_DIR)
 class TestViewsPosts(TestCase):
     @classmethod
     def setUpClass(cls) -> None:
-        small_gif = (
-            b'\x47\x49\x46\x38\x39\x61\x01\x00'
-            b'\x01\x00\x00\x00\x00\x21\xf9\x04'
-            b'\x01\x0a\x00\x01\x00\x2c\x00\x00'
-            b'\x00\x00\x01\x00\x01\x00\x00\x02'
-            b'\x02\x4c\x01\x00\x3b'
-        )
-        uploaded = SimpleUploadedFile(
-            name='small.gif',
-            content=small_gif,
-            content_type='image/gif',
-        )
         super().setUpClass()
-        cls.user = User.objects.create_user(username='test_name')
-        cls.group = Group.objects.create(
-            title='Тестовая группа',
-            slug='test_slug',
-            description='Тестовое описание',
-        )
-        cls.post = Post.objects.create(
-            author=TestViewsPosts.user,
+        cls.user_author = mixer.blend(User)
+        cls.group = mixer.blend(Group)
+        cls.post = mixer.blend(
+            Post,
+            author=TestViewsPosts.user_author,
             group=TestViewsPosts.group,
-            text='Тестовый пост более 15 символов',
-            image=uploaded,
         )
-        cls.extra_group = Group.objects.create(
-            title='Тестовая группа',
-            slug='test_slug_extra',
-            description='Тестовое описание',
-        )
-        cls.follower_user = User.objects.create_user(username='vsko')
+        cls.authorized_client_author = Client()
+        cls.authorized_client_author.force_login(TestViewsPosts.user_author)
 
     @classmethod
     def tearDownClass(cls) -> None:
@@ -58,48 +37,20 @@ class TestViewsPosts(TestCase):
         shutil.rmtree(TEMP_MEDIA_ROOT, ignore_errors=True)
 
     def setUp(self) -> None:
-        self.authorized_client = Client()
-        self.authorized_client.force_login(TestViewsPosts.user)
-        self.follower_user_client = Client()
-        self.follower_user_client.force_login(TestViewsPosts.follower_user)
         cache.clear()
 
-    def test_correct_templates(self) -> None:
-        """Обращение по namespace:name возвращают правильный шаблон"""
-        response_expected = {
-            reverse('posts:index'): 'posts/index.html',
-            reverse('posts:post_create'): 'posts/create_post.html',
-            reverse(
-                'posts:group_list', kwargs={'slug': TestViewsPosts.group.slug}
-            ): 'posts/group_list.html',
-            reverse(
-                'posts:post_detail', kwargs={'pk': TestViewsPosts.post.pk}
-            ): 'posts/post_detail.html',
-            reverse(
-                'posts:post_edit', kwargs={'pk': TestViewsPosts.post.pk}
-            ): 'posts/create_post.html',
-            reverse(
-                'posts:profile',
-                kwargs={'username': TestViewsPosts.user.username},
-            ): 'posts/profile.html',
-            reverse('posts:follow_index'): 'posts/follow.html',
-        }
-        for response, value in response_expected.items():
-            with self.subTest(value=value):
-                self.assertTemplateUsed(
-                    self.authorized_client.get(response),
-                    value,
-                    msg_prefix=f'Вызывается не тот шаблон {value}!',
-                )
+    def correct_page_obj_first_obj(self, first_object: Post) -> None:
+        """Проверка соответствия поста на странице.
 
-    def correct_page_obj_first_obj(self, context) -> None:
-        """Проверка соотвествия поста на странице"""
+        Args:
+            first_object: Первый на странице объект модели Post.
+        """
         fields_to_check = {
-            context.pk: TestViewsPosts.post.pk,
-            context.author.username: TestViewsPosts.user.username,
-            context.group.title: TestViewsPosts.group.title,
-            context.text: TestViewsPosts.post.text,
-            context.image: TestViewsPosts.post.image,
+            first_object.pk: self.post.pk,
+            first_object.author.username: self.user_author.username,
+            first_object.group.title: self.group.title,
+            first_object.text: self.post.text,
+            first_object.image: self.post.image,
         }
         for field, expected in fields_to_check.items():
             with self.subTest(expected=expected):
@@ -107,71 +58,96 @@ class TestViewsPosts(TestCase):
 
     def test_index_context(self) -> None:
         """Шаблон index сформирован с правильным контекстом."""
-        first_object = self.authorized_client.get(
-            reverse('posts:index')
+        first_object = self.authorized_client_author.get(
+            reverse('posts:index'),
         ).context['page_obj'][0]
-
         self.correct_page_obj_first_obj(first_object)
 
     def test_group_list_context(self) -> None:
-        """Проверка правильности контекста для group_list"""
-        first_object = self.authorized_client.get(
-            reverse(
-                'posts:group_list', kwargs={'slug': TestViewsPosts.group.slug}
-            )
+        """Проверка правильности контекста для group_list."""
+        first_object = self.authorized_client_author.get(
+            reverse('posts:group_list', kwargs={'slug': self.group.slug}),
         ).context['page_obj'][0]
         self.correct_page_obj_first_obj(first_object)
+
         self.assertEqual(
-            self.authorized_client.get(
+            self.authorized_client_author.get(
                 reverse(
                     'posts:group_list',
-                    kwargs={'slug': TestViewsPosts.group.slug},
-                )
+                    kwargs={'slug': self.group.slug},
+                ),
             ).context['group'],
-            TestViewsPosts.group,
+            self.group,
         )
 
     def test_profile_context(self) -> None:
-        """Проверка правильности контекста для profile"""
-        first_object = self.authorized_client.get(
+        """Проверка правильности контекста для profile."""
+        follower_authorized_client = Client()
+        follower_authorized_client.force_login(user=mixer.blend(User))
+        first_object = self.authorized_client_author.get(
             reverse(
                 'posts:profile',
-                kwargs={'username': TestViewsPosts.user.username},
-            )
+                kwargs={'username': self.user_author.username},
+            ),
         ).context['page_obj'][0]
         self.correct_page_obj_first_obj(first_object)
         self.assertEqual(
-            self.authorized_client.get(
+            self.authorized_client_author.get(
                 reverse(
                     'posts:profile',
-                    kwargs={'username': TestViewsPosts.user.username},
-                )
+                    kwargs={'username': self.user_author.username},
+                ),
             ).context['author'],
-            TestViewsPosts.user,
+            self.user_author,
+        )
+
+        self.assertEqual(
+            self.authorized_client_author.get(
+                reverse(
+                    'posts:profile',
+                    kwargs={'username': self.user_author.username},
+                ),
+            ).context['following'],
+            False,
+        )
+
+        self.assertEqual(
+            follower_authorized_client.get(
+                reverse(
+                    'posts:profile',
+                    kwargs={'username': self.user_author.username},
+                ),
+            ).context['following'],
+            False,
         )
 
     def test_post_detail(self) -> None:
-        """Проверка правильности контекста для post_detail"""
-        context = self.authorized_client.get(
+        """Проверка правильности контекста для post_detail."""
+        context = self.authorized_client_author.get(
             reverse(
                 'posts:post_detail',
-                kwargs={'pk': TestViewsPosts.post.pk},
-            )
+                kwargs={'pk': self.post.pk},
+            ),
         ).context['post']
         self.correct_page_obj_first_obj(context)
 
     def test_follow_index(self) -> None:
-        """Проверка правильности контекста для follow_index"""
-        Follow.objects.create(
-            user=TestViewsPosts.follower_user, author=TestViewsPosts.user
-        )
-        context = self.follower_user_client.get(
-            reverse('posts:follow_index')
+        """Проверка правильности контекста для follow_index."""
+        follower_user = mixer.blend(User)
+        follower_user_client = Client()
+        follower_user_client.force_login(user=follower_user)
+        Follow.objects.create(user=follower_user, author=self.user_author)
+        context = follower_user_client.get(
+            reverse('posts:follow_index'),
         ).context['page_obj'][0]
         self.correct_page_obj_first_obj(context)
 
-    def correct_fields_post_form(self, form) -> None:
-        """Проверка соответствия полей для формы"""
+    def correct_fields_post_form(self, form: forms.Form) -> None:
+        """Проверка соответствия полей для формы.
+
+        Args:
+            form: Поле формы переданной на вызванную страницу.
+        """
         form_fields = {
             'text': forms.fields.CharField,
             'group': forms.fields.ChoiceField,
@@ -179,127 +155,133 @@ class TestViewsPosts(TestCase):
         }
         for value, expected in form_fields.items():
             with self.subTest(value=value):
-                form_field = form.fields[value]
-                self.assertIsInstance(form_field, expected)
+                self.assertIsInstance(form.fields[value], expected)
 
     def test_create_post(self) -> None:
-        """Проверка правильности контекста для create_post"""
-        form = self.authorized_client.get(
-            reverse('posts:post_create')
+        """Проверка правильности контекста для create_post."""
+        form = self.authorized_client_author.get(
+            reverse('posts:post_create'),
         ).context['form']
         self.correct_fields_post_form(form)
 
     def test_post_edit(self) -> None:
-        """Проверка правильности контекста для post_edit"""
-        form = self.authorized_client.get(
-            reverse('posts:post_edit', kwargs={'pk': TestViewsPosts.post.pk})
+        """Проверка правильности контекста для post_edit."""
+        form = self.authorized_client_author.get(
+            reverse('posts:post_edit', kwargs={'pk': self.post.pk}),
         ).context['form']
         self.correct_fields_post_form(form)
         self.assertEqual(
-            self.authorized_client.get(
-                reverse(
-                    'posts:post_edit', kwargs={'pk': TestViewsPosts.post.pk}
-                )
+            self.authorized_client_author.get(
+                reverse('posts:post_edit', kwargs={'pk': self.post.pk}),
             ).context['is_edit'],
             True,
         )
 
     def test_extra_check(self) -> None:
-        """Проверка, что уникальный пост попадает на нужные страницы"""
-        self.assertEqual(
-            Post.objects.filter(pk=TestViewsPosts.post.pk).exists(), True
-        )
+        """Проверка, что уникальный пост попадает на нужные страницы."""
+        extra_group = mixer.blend(Group)
+        self.assertEqual(Post.objects.filter(pk=self.post.pk).exists(), True)
         response = {
             'index': reverse('posts:index'),
             'profile': reverse(
                 'posts:profile',
-                kwargs={'username': TestViewsPosts.user.username},
+                kwargs={'username': self.user_author.username},
             ),
             'group_list': reverse(
-                'posts:group_list', kwargs={'slug': TestViewsPosts.group.slug}
+                'posts:group_list',
+                kwargs={'slug': self.group.slug},
             ),
         }
         for value in response.values():
             with self.subTest(value=value):
                 self.assertEqual(
-                    self.authorized_client.get(value).context['page_obj'][0],
-                    TestViewsPosts.post,
+                    self.authorized_client_author.get(value).context[
+                        'page_obj'
+                    ][0],
+                    self.post,
                     msg=f'{value}',
                 )
 
         self.assertEqual(
             len(
                 (
-                    self.authorized_client.get(
+                    self.authorized_client_author.get(
                         reverse(
                             'posts:group_list',
-                            kwargs={'slug': TestViewsPosts.extra_group.slug},
+                            kwargs={'slug': extra_group.slug},
                         ),
                     )
-                ).context['page_obj']
+                ).context['page_obj'],
             ),
             0,
         )
 
     def test_create_comment_authorized(self) -> None:
-        """Проверка создания и отображения коммента на странице"""
-        form_data = {'text': 'Комментарий'}
-        response = self.authorized_client.post(
+        """Проверка создания и отображения коммента на странице."""
+        form_data = {
+            'text': 'Комментарий',
+        }
+        response = self.authorized_client_author.post(
             reverse(
-                'posts:add_comment', kwargs={'post_id': TestViewsPosts.post.pk}
+                'posts:add_comment',
+                kwargs={'pk': self.post.pk},
             ),
             data=form_data,
         )
         self.assertRedirects(
             response,
-            reverse(
-                'posts:post_detail', kwargs={'pk': TestViewsPosts.post.pk}
-            ),
+            reverse('posts:post_detail', kwargs={'pk': self.post.pk}),
         )
         self.assertEqual(
-            self.authorized_client.get(
+            self.authorized_client_author.get(
                 reverse(
-                    'posts:post_detail', kwargs={'pk': TestViewsPosts.post.pk}
-                )
+                    'posts:post_detail',
+                    kwargs={'pk': self.post.pk},
+                ),
             ).context['comments'][0],
             Comment.objects.get(
-                author=TestViewsPosts.user,
+                author=self.user_author,
                 text=form_data['text'],
-                post=TestViewsPosts.post.pk,
+                post=self.post.pk,
             ),
         )
 
     def test_follow(self) -> None:
-        """Проверка возможности подписки и отписки"""
+        """Проверка возможности подписки и отписки."""
+        follower_user = mixer.blend(User)
+        follower_user_client = Client()
+        follower_user_client.force_login(user=follower_user)
         self.assertEqual(
             Follow.objects.filter(
-                author=TestViewsPosts.user, user=TestViewsPosts.follower_user
+                author=self.user_author,
+                user=follower_user,
             ).exists(),
             False,
         )
-        self.follower_user_client.get(
+        follower_user_client.get(
             reverse(
                 'posts:profile_follow',
-                kwargs={'username': TestViewsPosts.user.username},
-            )
+                kwargs={'username': self.user_author.username},
+            ),
         )
         self.assertEqual(
             Follow.objects.filter(
-                author=TestViewsPosts.user, user=TestViewsPosts.follower_user
+                author=self.user_author,
+                user=follower_user,
             ).exists(),
             True,
         )
 
-        self.follower_user_client.get(
+        follower_user_client.get(
             reverse(
                 'posts:profile_unfollow',
-                kwargs={'username': TestViewsPosts.user.username},
-            )
+                kwargs={'username': self.user_author.username},
+            ),
         )
         self.assertEqual(
             Follow.objects.filter(
-                user=TestViewsPosts.follower_user,
-                author=TestViewsPosts.user,
+                user=follower_user,
+                author=self.user_author,
             ).exists(),
             False,
         )

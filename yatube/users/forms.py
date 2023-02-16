@@ -9,8 +9,8 @@ class CreationForm(UserCreationForm):
         model = User
         fields = ('first_name', 'last_name', 'username', 'email')
         labels = {
-            'first_name': 'Имя',
-            'last_name': 'Фамилия',
-            'username': 'Логин',
-            'email': 'Почта',
+            'first_name': 'имя',
+            'last_name': 'фамилия',
+            'username': 'логин',
+            'email': 'почта',
         }

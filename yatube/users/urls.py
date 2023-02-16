@@ -1,10 +1,9 @@
 from django.contrib.auth import views
 from django.urls import include, path, reverse_lazy
 
-from users.apps import UsersConfig
 from users.views import SignUp
 
-app_name = UsersConfig.name
+app_name = '%(app_label)s'
 
 passwords = [
     path(

@@ -13,71 +13,76 @@ User = get_user_model()
 
 @cache_page(20, key_prefix='index_page')
 def index(request: HttpRequest) -> HttpResponse:
-    posts = Post.objects.select_related(
-        'author',
-        'group',
-    )
     return render(
         request,
         'posts/index.html',
         {
-            'page_obj': paginate(request, posts),
+            'page_obj': paginate(
+                request,
+                Post.objects.select_related(
+                    'author',
+                    'group',
+                ),
+            ),
         },
     )
 
 
 def group_posts(request: HttpRequest, slug: str) -> HttpResponse:
-    group = get_object_or_404(Group, slug=slug)
-    posts = group.posts.select_related(
-        'author',
-        'group',
-    )
     return render(
         request,
         'posts/group_list.html',
         {
-            'page_obj': paginate(request, posts),
-            'group': group,
+            'page_obj': paginate(
+                request,
+                get_object_or_404(Group, slug=slug).posts.select_related(
+                    'author',
+                    'group',
+                ),
+            ),
+            'group': get_object_or_404(Group, slug=slug),
         },
     )
 
 
 def profile(request: HttpRequest, username: str) -> HttpResponse:
-    user = get_object_or_404(User, username=username)
-    posts = user.posts.select_related(
-        'author',
-    )
-    following = False
-    if request.user.is_authenticated:
-        author = get_object_or_404(User, username=username)
-        if author.following.filter(user=request.user):
-            following = True
     return render(
         request,
         'posts/profile.html',
         {
-            'page_obj': paginate(request, posts),
-            'author': user,
-            'following': following,
+            'page_obj': paginate(
+                request,
+                get_object_or_404(
+                    User,
+                    username=username,
+                ).posts.select_related(
+                    'author',
+                ),
+            ),
+            'author': get_object_or_404(User, username=username),
+            'following': bool(
+                request.user.is_authenticated
+                and get_object_or_404(User, username=username)
+                .following.filter(user=request.user)
+                .exists(),
+            ),
         },
     )
 
 
 def post_detail(request: HttpRequest, pk: int) -> HttpResponse:
-    post = get_object_or_404(Post, pk=pk)
-    comments = post.comments.select_related(
-        'author',
-    )
-    form = CommentForm(
-        request.POST or None,
-    )
+
     return render(
         request,
         'posts/post_detail.html',
         {
-            'post': post,
-            'comments': comments,
-            'form': form,
+            'post': get_object_or_404(Post, pk=pk),
+            'comments': get_object_or_404(Post, pk=pk).comments.select_related(
+                'author',
+            ),
+            'form': CommentForm(
+                request.POST or None,
+            ),
         },
     )
 
@@ -125,21 +130,19 @@ def post_edit(request: HttpRequest, pk: int) -> HttpResponse:
 
 
 @login_required
-def add_comment(request: HttpRequest, post_id: int) -> HttpResponse:
-    form = CommentForm(request.POST)
-    post = get_object_or_404(Post, pk=post_id)
+def add_comment(request: HttpRequest, pk: int) -> HttpResponse:
+    form = CommentForm(request.POST or None)
     if form.is_valid():
-        comment = form.save(commit=False)
-        comment.author = request.user
-        comment.post = post
-        comment.save()
-    return redirect('posts:post_detail', pk=post_id)
+        form.instance.author = request.user
+        form.instance.post = get_object_or_404(Post, pk=pk)
+        form.save()
+    return redirect('posts:post_detail', pk=pk)
 
 
 @login_required
 def follow_index(request: HttpRequest) -> HttpResponse:
     posts = Post.objects.filter(
-        author__following__user=request.user
+        author__following__user=request.user,
     ).select_related(
         'author',
         'group',
@@ -154,7 +157,7 @@ def follow_index(request: HttpRequest) -> HttpResponse:
 
 
 @login_required
-def profile_follow(request: HttpRequest, username: str):
+def profile_follow(request: HttpRequest, username: str) -> HttpResponse:
     author = get_object_or_404(User, username=username)
     if request.user != author:
         Follow.objects.get_or_create(
@@ -165,8 +168,9 @@ def profile_follow(request: HttpRequest, username: str):
 
 
 @login_required
-def profile_unfollow(request, username):
-    Follow.objects.get(
-        user=request.user, author=get_object_or_404(User, username=username)
+def profile_unfollow(request: HttpRequest, username: str) -> HttpResponse:
+    get_object_or_404(
+        Follow.objects.filter(author__following__user=request.user),
+        author=get_object_or_404(User, username=username),
     ).delete()
     return redirect('posts:follow_index')
