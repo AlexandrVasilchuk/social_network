@@ -1,5 +1,3 @@
-from typing import Any
-
 from django.conf import settings
 from django.core.paginator import Page, Paginator
 from django.db.models.query import QuerySet
@@ -10,7 +8,7 @@ def paginate(
     request: HttpRequest,
     queryset: QuerySet,
     pagesize: int = settings.PAGE_SIZE,
-) -> Page[Any]:
+) -> Page:
     return Paginator(
         queryset,
         pagesize,
