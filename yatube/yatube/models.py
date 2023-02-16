@@ -2,7 +2,7 @@ from django.db import models
 
 
 class AbstractedModel(models.Model):
-    """Абстрактная модель. Добавляет дату создания."""
+    """Абстрактная модель. Добавляет дату создания и текст."""
 
     pub_date = models.DateTimeField(
         verbose_name='дата создания',
