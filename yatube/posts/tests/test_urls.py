@@ -16,109 +16,108 @@ class PostURLTest(TestCase):
         super().setUpClass()
         cls.user = mixer.blend(User)
         cls.user_author = mixer.blend(User)
+
         cls.group = mixer.blend('posts.Group')
         cls.post = mixer.blend(
             'posts.Post',
-            author=PostURLTest.user_author,
-            group=PostURLTest.group,
+            author=cls.user_author,
+            group=cls.group,
         )
-        cls.authorized_client_author = Client()
-        cls.authorized_client_author.force_login(PostURLTest.user_author)
-        cls.authorized_client_follower = Client()
-        cls.authorized_client_follower.force_login(PostURLTest.user)
+
+        cls.author, cls.follower = Client(), Client()
+        cls.author.force_login(cls.user_author)
+        cls.follower.force_login(cls.user)
+
         cls.urls = {
             'add_comment': reverse(
                 'posts:add_comment',
-                kwargs={'pk': PostURLTest.post.pk},
+                args=(cls.post.pk,),
             ),
             'follow_index': reverse('posts:follow_index'),
             'group_list': reverse(
                 'posts:group_list',
-                kwargs={'slug': PostURLTest.group.slug},
+                args=(cls.group.slug,),
             ),
             'post_create': reverse('posts:post_create'),
             'post_detail': reverse(
                 'posts:post_detail',
-                kwargs={'pk': PostURLTest.post.pk},
+                args=(cls.post.pk,),
             ),
             'post_edit': reverse(
                 'posts:post_edit',
-                kwargs={'pk': PostURLTest.post.pk},
+                args=(cls.post.pk,),
             ),
             'profile': reverse(
                 'posts:profile',
-                kwargs={'username': PostURLTest.user.username},
+                args=(cls.user.username,),
             ),
             'profile_follow': reverse(
                 'posts:profile_follow',
-                kwargs={'username': PostURLTest.user.username},
+                args=(cls.user.username,),
             ),
             'profile_unfollow': reverse(
                 'posts:profile_unfollow',
-                kwargs={'username': PostURLTest.user.username},
+                args=(cls.user.username,),
             ),
             'index': reverse('posts:index'),
             'missing': '/non-exists/',
         }
 
-    def setUp(self) -> None:
-        cache.clear()
-
     def test_http_statuses(self) -> None:
         """Соответствие статуса страниц по указанным адресам для всех."""
         httpstatuses = (
-            (self.urls.get('add_comment'), HTTPStatus.FOUND, self.client),
-            (self.urls.get('follow_index'), HTTPStatus.FOUND, self.client),
-            (self.urls.get('group_list'), HTTPStatus.OK, self.client),
-            (self.urls.get('post_create'), HTTPStatus.FOUND, self.client),
-            (self.urls.get('post_detail'), HTTPStatus.OK, self.client),
-            (self.urls.get('post_edit'), HTTPStatus.FOUND, self.client),
-            (self.urls.get('profile'), HTTPStatus.OK, self.client),
-            (self.urls.get('profile_follow'), HTTPStatus.FOUND, self.client),
-            (self.urls.get('profile_unfollow'), HTTPStatus.FOUND, self.client),
-            (self.urls.get('index'), HTTPStatus.OK, self.client),
-            (self.urls.get('missing'), HTTPStatus.NOT_FOUND, self.client),
+            ('add_comment', HTTPStatus.FOUND, self.client),
+            ('follow_index', HTTPStatus.FOUND, self.client),
+            ('group_list', HTTPStatus.OK, self.client),
+            ('post_create', HTTPStatus.FOUND, self.client),
+            ('post_detail', HTTPStatus.OK, self.client),
+            ('post_edit', HTTPStatus.FOUND, self.client),
+            ('profile', HTTPStatus.OK, self.client),
+            ('profile_follow', HTTPStatus.FOUND, self.client),
+            ('profile_unfollow', HTTPStatus.FOUND, self.client),
+            ('index', HTTPStatus.OK, self.client),
+            ('missing', HTTPStatus.NOT_FOUND, self.client),
             (
-                self.urls.get('follow_index'),
+                'follow_index',
                 HTTPStatus.OK,
-                self.authorized_client_author,
+                self.author,
             ),
             (
-                self.urls.get('post_create'),
+                'post_create',
                 HTTPStatus.OK,
-                self.authorized_client_author,
+                self.author,
             ),
             (
-                self.urls.get('post_edit'),
+                'post_edit',
                 HTTPStatus.OK,
-                self.authorized_client_author,
+                self.author,
             ),
             (
-                self.urls.get('missing'),
+                'missing',
                 HTTPStatus.NOT_FOUND,
-                self.authorized_client_author,
+                self.author,
             ),
             (
-                self.urls.get('follow_index'),
+                'follow_index',
                 HTTPStatus.OK,
-                self.authorized_client_follower,
+                self.follower,
             ),
             (
-                self.urls.get('post_create'),
+                'post_create',
                 HTTPStatus.OK,
-                self.authorized_client_follower,
+                self.follower,
             ),
             (
-                self.urls.get('post_edit'),
+                'post_edit',
                 HTTPStatus.FOUND,
-                self.authorized_client_follower,
+                self.follower,
             ),
         )
 
         for response, expected_status, client in httpstatuses:
             with self.subTest(value=expected_status):
                 self.assertEqual(
-                    client.get(response).status_code,
+                    client.get(self.urls.get(response)).status_code,
                     expected_status,
                     f'Страница {response} не доступна по нужному адресу!',
                 )
@@ -127,73 +126,73 @@ class PostURLTest(TestCase):
         """Соответствие вызываемого шаблона."""
         templates = (
             (
-                self.urls.get('group_list'),
+                'group_list',
                 'posts/group_list.html',
                 self.client,
             ),
             (
-                self.urls.get('post_detail'),
+                'post_detail',
                 'posts/post_detail.html',
                 self.client,
             ),
-            (self.urls.get('profile'), 'posts/profile.html', self.client),
-            (self.urls.get('index'), 'posts/index.html', self.client),
+            ('profile', 'posts/profile.html', self.client),
+            ('index', 'posts/index.html', self.client),
             (
-                self.urls.get('follow_index'),
+                'follow_index',
                 'posts/follow.html',
-                self.authorized_client_author,
+                self.author,
             ),
             (
-                self.urls.get('group_list'),
+                'group_list',
                 'posts/group_list.html',
-                self.authorized_client_author,
+                self.author,
             ),
             (
-                self.urls.get('post_create'),
+                'post_create',
                 'posts/create_post.html',
-                self.authorized_client_author,
+                self.author,
             ),
             (
-                self.urls.get('post_detail'),
+                'post_detail',
                 'posts/post_detail.html',
-                self.authorized_client_author,
+                self.author,
             ),
             (
-                self.urls.get('post_edit'),
+                'post_edit',
                 'posts/create_post.html',
-                self.authorized_client_author,
+                self.author,
             ),
             (
-                self.urls.get('profile'),
+                'profile',
                 'posts/profile.html',
-                self.authorized_client_author,
+                self.author,
             ),
             (
-                self.urls.get('index'),
+                'index',
                 'posts/index.html',
-                self.authorized_client_author,
+                self.author,
             ),
             (
-                self.urls.get('missing'),
+                'missing',
                 'core/404.html',
-                self.authorized_client_author,
+                self.author,
             ),
             (
-                self.urls.get('follow_index'),
+                'follow_index',
                 'posts/follow.html',
-                self.authorized_client_follower,
+                self.follower,
             ),
             (
-                self.urls.get('post_create'),
+                'post_create',
                 'posts/create_post.html',
-                self.authorized_client_follower,
+                self.follower,
             ),
         )
 
         for response, expected_template, client in templates:
             with self.subTest(value=expected_template):
                 self.assertTemplateUsed(
-                    client.get(response),
+                    client.get(self.urls.get(response)),
                     expected_template,
                     f'Страница {response} не вызывает нужный шаблон!',
                 )
@@ -235,27 +234,27 @@ class PostURLTest(TestCase):
             (
                 self.urls.get('add_comment'),
                 self.urls.get('post_detail'),
-                self.authorized_client_follower,
+                self.follower,
             ),
             (
                 self.urls.get('post_edit'),
                 self.urls.get('post_detail'),
-                self.authorized_client_follower,
+                self.follower,
             ),
             (
                 self.urls.get('profile_follow'),
                 self.urls.get('follow_index'),
-                self.authorized_client_follower,
+                self.follower,
             ),
             (
                 self.urls.get('add_comment'),
                 self.urls.get('post_detail'),
-                self.authorized_client_author,
+                self.author,
             ),
             (
                 self.urls.get('profile_follow'),
                 self.urls.get('follow_index'),
-                self.authorized_client_author,
+                self.author,
             ),
         )
 

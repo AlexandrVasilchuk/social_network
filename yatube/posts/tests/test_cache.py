@@ -2,6 +2,7 @@ from django.contrib.auth import get_user_model
 from django.core.cache import cache
 from django.test import Client, TestCase
 from django.urls import reverse
+from mixer.backend.django import mixer
 
 from posts.models import Post
 
@@ -12,7 +13,7 @@ class TestCache(TestCase):
     @classmethod
     def setUpClass(cls) -> None:
         super().setUpClass()
-        cls.user = User.objects.create_user(username='auth')
+        cls.user = mixer.blend(User)
 
     def setUp(self) -> None:
         self.authorized_client = Client()
@@ -20,10 +21,7 @@ class TestCache(TestCase):
 
     def test_index_cache(self) -> None:
         """Проверка доступности кеша index."""
-        new_post = Post.objects.create(
-            author=self.user,
-            text='1',
-        )
+        new_post = mixer.blend(Post, author=self.user)
         response_before_deleting = self.authorized_client.get(
             reverse('posts:index'),
         )

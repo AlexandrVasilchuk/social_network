@@ -4,6 +4,7 @@ from typing import Dict, Union
 
 from django.conf import settings
 from django.contrib.auth import get_user_model
+from django.contrib.auth.views import redirect_to_login
 from django.http import HttpResponse
 from django.test import Client, TestCase, override_settings
 from django.urls import reverse
@@ -15,6 +16,7 @@ from posts.tests.common import image
 User = get_user_model()
 
 TEMP_MEDIA_ROOT = tempfile.mkdtemp(dir=settings.BASE_DIR)
+UPLOADED_TO = Post.image.field.upload_to
 
 
 @override_settings(MEDIA_ROOT=TEMP_MEDIA_ROOT)
@@ -22,36 +24,44 @@ class TestPostForm(TestCase):
     @classmethod
     def setUpClass(cls) -> None:
         super().setUpClass()
-        cls.user = User.objects.create_user(username='vsko')
+        cls.user = mixer.blend(User)
         cls.authorized_client = Client()
-        cls.authorized_client.force_login(TestPostForm.user)
+        cls.authorized_client.force_login(cls.user)
 
     @classmethod
     def tearDownClass(cls) -> None:
         super().tearDownClass()
         shutil.rmtree(TEMP_MEDIA_ROOT, ignore_errors=True)
 
-    def identification_post(
+    def post_fields(
         self,
         response: HttpResponse,
-        form_data: Dict['str', Union[Post, Group, int, str]],
+        data: Dict['str', Union[Post, Group, int, str]],
     ) -> None:
-        """Проверка, что искомый пост = первый пост."""
-        post = Post.objects.get(pk=response.context['post'].pk)
+        """Проверка, что искомый пост = первый пост.
+
+        Args:
+            data: Словарь с данными, отправленными в форму
+                создания/изменения поста.
+
+            response: Страница, на которой отображается
+                опубликованный/изменённый пост.
+        """
+        post = response.context['post']
         value_expected = {
-            post.group.pk: form_data['group'],
-            post.text: form_data['text'],
-            post.author.pk: self.user.pk,
-            post.pk: response.context['post'].pk,
+            'group_id': data['group'],
+            'text': data['text'],
+            'author_id': self.user.pk,
+            'pk': response.context['post'].pk,
+            'image': UPLOADED_TO + data['image'].name,
         }
         for value, expected in value_expected.items():
             with self.subTest(value=expected):
-                self.assertEqual(value, expected)
+                self.assertEqual(getattr(post, value), expected)
 
-    def test_newpost_form(self) -> None:
+    def create_post(self) -> None:
         """Проверка добавления записи в БД при отправке валидной формы."""
         group = mixer.blend('posts.Group')
-        self.assertEqual(Post.objects.count(), 0)
         form_data = {
             'text': 'Тестовый пост',
             'group': group.pk,
@@ -66,15 +76,20 @@ class TestPostForm(TestCase):
             response,
             reverse(
                 'posts:profile',
-                kwargs={'username': TestPostForm.user.username},
+                args=(self.user.username,),
             ),
         )
-        self.assertEqual(
-            response.context['page_obj'][0].image.name,
-            Post.image.field.upload_to + form_data['image'].name,
-        )
         self.assertEqual(Post.objects.count(), 1)
-        self.identification_post(response, form_data)
+        self.post_fields(response, form_data)
+
+        self.assertRedirects(
+            self.client.post(
+                reverse('posts:post_create'),
+                data=form_data,
+                follow=True,
+            ),
+            redirect_to_login(next=reverse('posts:post_create')).url,
+        )
 
     def test_help_text_newpost_form(self) -> None:
         field_expected_value = {
@@ -93,50 +108,64 @@ class TestPostForm(TestCase):
 
     def test_edit_post(self) -> None:
         """Проверка работы формы при изменении поста."""
-        new_group = mixer.blend('posts.Group')
+        not_author = mixer.blend(User)
+        not_author_client = Client()
+        not_author_client.force_login(user=not_author)
+        group = mixer.blend('posts.Group')
         post = mixer.blend('posts.Post', author=self.user)
         form_data = {
             'text': 'Изменённый текст',
-            'group': new_group.pk,
+            'group': group.pk,
+            'image': image(),
         }
         response = self.authorized_client.post(
-            reverse('posts:post_edit', kwargs={'pk': post.pk}),
+            reverse('posts:post_edit', args=(post.pk,)),
             data=form_data,
             follow=True,
         )
         self.assertRedirects(
             response,
-            reverse('posts:post_detail', kwargs={'pk': post.pk}),
+            reverse('posts:post_detail', args=(post.pk,)),
         )
-        self.identification_post(response, form_data)
+        self.post_fields(response, form_data)
+        self.assertRedirects(
+            self.client.post(
+                reverse('posts:post_edit', args=(post.pk,)),
+                data=form_data,
+                follow=True,
+            ),
+            redirect_to_login(
+                next=reverse('posts:post_edit', args=(post.pk,)),
+            ).url,
+        )
+        self.assertRedirects(
+            not_author_client.post(
+                reverse('posts:post_edit', args=(post.pk,)),
+                data=form_data,
+                follow=True,
+            ),
+            reverse('posts:post_detail', args=(post.pk,)),
+        )
 
 
 class TestCommentForm(TestCase):
     @classmethod
     def setUpClass(cls) -> None:
         super().setUpClass()
-        cls.user = User.objects.create_user(
-            username='vsko',
-        )
-        cls.post = Post.objects.create(
-            author=TestCommentForm.user,
-            text='Тестовый пост',
-        )
+        cls.user = mixer.blend(User)
+        cls.post = mixer.blend('posts.Post', author=cls.user)
         cls.authorized_client = Client()
-        cls.authorized_client.force_login(user=TestCommentForm.user)
+        cls.authorized_client.force_login(user=cls.user)
 
     def test_comment_form(self) -> None:
         """Проверка работы формы добавления комментария и изменения в БД."""
-        self.assertEqual(Comment.objects.count(), 0)
         form_data = {
             'text': 'Коммент Васи Пупкина',
         }
         response = self.authorized_client.post(
             reverse(
                 'posts:add_comment',
-                kwargs={
-                    'pk': self.post.pk,
-                },
+                args=(self.post.pk,),
             ),
             data=form_data,
         )
@@ -144,28 +173,26 @@ class TestCommentForm(TestCase):
             response,
             reverse(
                 'posts:post_detail',
-                kwargs={
-                    'pk': self.post.pk,
-                },
+                args=(self.post.pk,),
             ),
         )
+        field_expected = {
+            'author': self.user,
+            'post_id': self.post.pk,
+            'text': form_data['text'],
+        }
+        comment = self.client.get(
+            reverse(
+                'posts:post_detail',
+                args=(self.post.pk,),
+            ),
+        ).context['comments'][0]
+        for field, expected in field_expected.items():
+            with self.subTest(value=field):
+                self.assertEqual(getattr(comment, field), expected)
+
         self.assertEqual(
-            Comment.objects.filter(
-                author=self.user,
-                post=self.post.pk,
-                text=form_data['text'],
-            ).exists(),
-            True,
-        )
-        self.assertEqual(
-            self.client.get(
-                reverse(
-                    'posts:post_detail',
-                    kwargs={
-                        'pk': self.post.pk,
-                    },
-                ),
-            ).context['comments'][0],
+            comment,
             Comment.objects.get(
                 author=self.user,
                 post=self.post.pk,
@@ -173,3 +200,15 @@ class TestCommentForm(TestCase):
             ),
         )
         self.assertEqual(Comment.objects.count(), 1)
+        self.assertRedirects(
+            self.client.post(
+                reverse(
+                    'posts:add_comment',
+                    args=(self.post.pk,),
+                ),
+                data=form_data,
+            ),
+            redirect_to_login(
+                next=reverse('posts:add_comment', args=(self.post.pk,)),
+            ).url,
+        )

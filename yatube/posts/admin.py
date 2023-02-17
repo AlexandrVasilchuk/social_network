@@ -9,13 +9,13 @@ class PostAdmin(BaseAdmin):
     list_display = (
         'pk',
         'text',
-        'pub_date',
+        'created',
         'author',
         'group',
     )
     list_editable = ('group',)
     search_fields = ('text',)
-    list_filter = ('pub_date',)
+    list_filter = ('created',)
 
 
 @admin.register(Group)
@@ -31,7 +31,7 @@ class CommentAdmin(BaseAdmin):
     list_display = (
         'post',
         'text',
-        'pub_date',
+        'created',
         'author',
     )
 

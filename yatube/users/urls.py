@@ -10,14 +10,14 @@ passwords = [
         'change/form/',
         views.PasswordChangeView.as_view(
             success_url=reverse_lazy('users:password_change_done'),
-            template_name='users/password_change.html',
+            template_name='users/passwords/change/form.html',
         ),
         name='password_change_form',
     ),
     path(
         'change/done/',
         views.PasswordChangeDoneView.as_view(
-            template_name='users/password_change_done.html',
+            template_name='users/passwords/change/done.html',
         ),
         name='password_change_done',
     ),
@@ -25,21 +25,21 @@ passwords = [
         'reset/form/',
         views.PasswordResetView.as_view(
             success_url=reverse_lazy('users:password_reset_done'),
-            template_name='users/password_reset_form.html',
+            template_name='users/passwords/reset/form.html',
         ),
         name='password_reset_form',
     ),
     path(
         'reset/complete/',
         views.PasswordResetCompleteView.as_view(
-            template_name='users/password_reset_complete.html',
+            template_name='users/passwords/reset/complete.html',
         ),
         name='password_reset_complete',
     ),
     path(
         'reset/done/',
         views.PasswordResetDoneView.as_view(
-            template_name='users/password_reset_done.html',
+            template_name='users/passwords/reset/done.html',
         ),
         name='password_reset_done',
     ),
@@ -47,7 +47,7 @@ passwords = [
         'reset/<uidb64>/<token>/',
         views.PasswordResetConfirmView.as_view(
             success_url=reverse_lazy('users:password_reset_complete'),
-            template_name='users/password_reset_confirm.html',
+            template_name='users/passwords/reset/confirm.html',
         ),
         name='password_reset_confirm',
     ),

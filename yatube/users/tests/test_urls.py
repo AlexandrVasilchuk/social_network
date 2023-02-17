@@ -16,7 +16,7 @@ class UsersURLTest(TestCase):
 
     def setUp(self) -> None:
         self.authorized_client = Client()
-        self.authorized_client.force_login(UsersURLTest.user)
+        self.authorized_client.force_login(self.user)
 
     def test_urls_available(self) -> None:
         """Провека доступности адресов."""
@@ -49,10 +49,10 @@ class UsersURLTest(TestCase):
         """Проверка редиректа для анонимного пользователя."""
         response_values = {
             reverse('users:password_change_form'): redirect_to_login(
-                next=reverse('users:password_change_form')
+                next=reverse('users:password_change_form'),
             ).url,
             reverse('users:password_change_done'): redirect_to_login(
-                next=reverse('users:password_change_done')
+                next=reverse('users:password_change_done'),
             ).url,
         }
         for response, expected in response_values.items():

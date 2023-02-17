@@ -18,5 +18,7 @@
   <a href="{% url 'posts:post_detail' post.pk %}">подробная информация</a>
 </p>
 {% if post.group and request.resolver_match.view_name != "posts:group_list" %}
-  <a href="{% url 'posts:group_list' post.group.slug %}">все записи группы</a>
+  <a href="{% url 'posts:group_list' post.group.slug %}">
+    #{{ post.group.slug }}
+  </a>
 {% endif %}

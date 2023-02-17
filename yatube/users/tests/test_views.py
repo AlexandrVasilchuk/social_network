@@ -19,23 +19,23 @@ class TestUsersViews(TestCase):
         response_expected = {
             reverse(
                 'users:password_change_form',
-            ): 'users/password_change.html',
+            ): 'users/passwords/change/form.html',
             reverse(
                 'users:password_change_done',
-            ): 'users/password_change_done.html',
+            ): 'users/passwords/change/done.html',
             reverse(
                 'users:password_reset_form',
-            ): 'users/password_reset_form.html',
+            ): 'users/passwords/reset/form.html',
             reverse(
                 'users:password_reset_complete',
-            ): 'users/password_reset_complete.html',
+            ): 'users/passwords/reset/complete.html',
             reverse(
                 'users:password_reset_done',
-            ): 'users/password_reset_done.html',
+            ): 'users/passwords/reset/done.html',
             reverse(
                 'users:password_reset_confirm',
                 kwargs={'uidb64': 'MQ', 'token': '67t-0041e063fc003f28187f'},
-            ): 'users/password_reset_confirm.html',
+            ): 'users/passwords/reset/confirm.html',
             reverse('users:logout'): 'users/logged_out.html',
             reverse('users:signup'): 'users/signup.html',
             reverse('users:login'): 'users/login.html',

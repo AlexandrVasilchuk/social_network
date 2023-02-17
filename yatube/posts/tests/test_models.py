@@ -1,28 +1,26 @@
 from django.test import TestCase
 from mixer.backend.django import mixer
-
-from posts.models import POST_SYMBOLS_LIMITATION
+from posts.models import Comment, Follow, Group, POST_SYMBOLS_LIMITATION, Post
 
 
 class PostModelTest(TestCase):
     @classmethod
     def setUpClass(cls) -> None:
         super().setUpClass()
-        cls.group = mixer.blend('posts.Group')
         cls.post = mixer.blend('posts.Post')
 
     def test_verbose_name(self) -> None:
         """Verbose_name в полях совпадает с ожидаемым."""
-        field_verboses = {
+        field_verbose = {
             'text': 'текст',
-            'pub_date': 'дата создания',
+            'created': 'дата создания',
             'image': 'картинка',
             'group': 'группа',
         }
-        for value, expected in field_verboses.items():
+        for value, expected in field_verbose.items():
             with self.subTest(value=value):
                 self.assertEqual(
-                    self.post._meta.get_field(value).verbose_name,
+                    Post._meta.get_field(value).verbose_name,
                     expected,
                 )
 
@@ -43,15 +41,15 @@ class GroupModelTest(TestCase):
 
     def test_verbose_name(self) -> None:
         """Verbose_name в полях совпадает с ожидаемым."""
-        field_verboses = {
+        field_verbose = {
             'title': 'заголовок',
             'description': 'описание',
             'slug': 'имя группы',
         }
-        for value, expected in field_verboses.items():
+        for value, expected in field_verbose.items():
             with self.subTest(value=value):
                 self.assertEqual(
-                    self.group._meta.get_field(value).verbose_name,
+                    Group._meta.get_field(value).verbose_name,
                     expected,
                 )
 
@@ -74,12 +72,12 @@ class CommentModelTest(TestCase):
         """Verbose_name в полях совпадает с ожидаемым."""
         field_verboses = {
             'text': 'текст',
-            'pub_date': 'дата создания',
+            'created': 'дата создания',
         }
         for value, expected in field_verboses.items():
             with self.subTest(value=value):
                 self.assertEqual(
-                    self.comment._meta.get_field(value).verbose_name,
+                    Comment._meta.get_field(value).verbose_name,
                     expected,
                 )
 
@@ -87,7 +85,7 @@ class CommentModelTest(TestCase):
         """Проверка метода __str__."""
         self.assertEqual(
             str(self.comment),
-            self.comment.text,
+            self.comment.text[:POST_SYMBOLS_LIMITATION],
             'Метод __str__ работает неправильно для модели Group',
         )
 
@@ -100,14 +98,14 @@ class FollowModelTest(TestCase):
 
     def test_verbose_name(self) -> None:
         """Verbose_name в полях совпадает с ожидаемым."""
-        field_verboses = {
+        field_verbose = {
             'user': 'подписчик',
             'author': 'автор',
         }
-        for value, expected in field_verboses.items():
+        for value, expected in field_verbose.items():
             with self.subTest(value=value):
                 self.assertEqual(
-                    self.follow._meta.get_field(value).verbose_name,
+                    Follow._meta.get_field(value).verbose_name,
                     expected,
                 )
 

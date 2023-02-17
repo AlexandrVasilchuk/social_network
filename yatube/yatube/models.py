@@ -1,18 +1,15 @@
+from behaviors.behaviors import Timestamped
 from django.db import models
 
 
-class AbstractedModel(models.Model):
-    """Абстрактная модель. Добавляет дату создания и текст."""
-
-    pub_date = models.DateTimeField(
-        verbose_name='дата создания',
-        auto_now_add=True,
-    )
-    text = models.TextField(
-        verbose_name='текст',
-        max_length=200,
-    )
-
+class DefaultModel(models.Model):
     class Meta:
         abstract = True
-        ordering = ('-pub_date',)
+
+
+class TimestampedModel(DefaultModel, Timestamped):
+    class Meta:
+        abstract = True
+
+
+TimestampedModel._meta.get_field('created').verbose_name = 'дата создания'

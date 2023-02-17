@@ -12,10 +12,20 @@ class Migration(migrations.Migration):
     operations = [
         migrations.AlterModelOptions(
             name='comment',
-            options={'default_related_name': 'comments', 'ordering': ('-pub_date',), 'verbose_name': 'комментарий', 'verbose_name_plural': 'комментарии'},
+            options={
+                'default_related_name': 'comments',
+                'ordering': ('-pub_date',),
+                'verbose_name': 'комментарий',
+                'verbose_name_plural': 'комментарии',
+            },
         ),
         migrations.AlterModelOptions(
             name='post',
-            options={'default_related_name': 'posts', 'ordering': ('-pub_date',), 'verbose_name': 'пост', 'verbose_name_plural': 'посты'},
+            options={
+                'default_related_name': 'posts',
+                'ordering': ('-pub_date',),
+                'verbose_name': 'пост',
+                'verbose_name_plural': 'посты',
+            },
         ),
     ]

@@ -14,17 +14,17 @@ class PaginatorViewsTest(TestCase):
     @classmethod
     def setUpClass(cls) -> None:
         super().setUpClass()
-        cls.user = User.objects.create_user(username='auth')
+        cls.user = mixer.blend(User)
         cls.group = mixer.blend('posts.Group')
         mixer.cycle(AMMOUNT_OBJECTS).blend(
             'posts.Post',
-            author=PaginatorViewsTest.user,
-            group=PaginatorViewsTest.group,
+            author=cls.user,
+            group=cls.group,
         )
 
     def setUp(self) -> None:
         self.authorized_client = Client()
-        self.authorized_client.force_login(PaginatorViewsTest.user)
+        self.authorized_client.force_login(self.user)
         cache.clear()
 
     def test_paginator_separator(self) -> None:
@@ -36,21 +36,21 @@ class PaginatorViewsTest(TestCase):
             - settings.PAGE_SIZE,
             reverse(
                 'posts:group_list',
-                kwargs={'slug': PaginatorViewsTest.group.slug},
+                args=(self.group.slug,),
             ): settings.PAGE_SIZE,
             reverse(
                 'posts:group_list',
-                kwargs={'slug': PaginatorViewsTest.group.slug},
+                args=(self.group.slug,),
             )
             + '?page=2': AMMOUNT_OBJECTS
             - settings.PAGE_SIZE,
             reverse(
                 'posts:profile',
-                kwargs={'username': PaginatorViewsTest.user.username},
+                args=(self.user.username,),
             ): settings.PAGE_SIZE,
             reverse(
                 'posts:profile',
-                kwargs={'username': PaginatorViewsTest.user.username},
+                args=(self.user.username,),
             )
             + '?page=2': AMMOUNT_OBJECTS
             - settings.PAGE_SIZE,

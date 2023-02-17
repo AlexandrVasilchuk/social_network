@@ -1,14 +1,33 @@
 from django.contrib.auth import get_user_model
 from django.db import models
-
-from yatube.models import AbstractedModel
+from yatube.models import TimestampedModel, DefaultModel
 
 User = get_user_model()
 
 POST_SYMBOLS_LIMITATION = 15
 
 
-class Group(models.Model):
+class AbstractedModel(TimestampedModel):
+    """Абстрактная модель. Добавляет дату создания и текст."""
+
+    author = models.ForeignKey(
+        User,
+        on_delete=models.CASCADE,
+    )
+    text = models.TextField(
+        verbose_name='текст',
+        max_length=200,
+    )
+
+    class Meta:
+        abstract = True
+        ordering = ('-created',)
+
+    def __str__(self) -> str:
+        return self.text[:POST_SYMBOLS_LIMITATION]
+
+
+class Group(DefaultModel):
     titlemaxlenght = 200
 
     title = models.CharField('заголовок', max_length=titlemaxlenght)
@@ -20,10 +39,7 @@ class Group(models.Model):
 
 
 class Post(AbstractedModel):
-    author = models.ForeignKey(
-        User,
-        on_delete=models.CASCADE,
-    )
+
     group = models.ForeignKey(
         Group,
         blank=True,
@@ -51,21 +67,14 @@ class Comment(AbstractedModel):
         Post,
         on_delete=models.CASCADE,
     )
-    author = models.ForeignKey(
-        User,
-        on_delete=models.CASCADE,
-    )
 
     class Meta(AbstractedModel.Meta):
         verbose_name = 'комментарий'
         verbose_name_plural = 'комментарии'
         default_related_name = 'comments'
 
-    def __str__(self) -> str:
-        return self.text
 
-
-class Follow(models.Model):
+class Follow(DefaultModel):
     user = models.ForeignKey(
         User,
         verbose_name='подписчик',

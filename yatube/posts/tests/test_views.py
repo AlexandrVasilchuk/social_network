@@ -4,6 +4,7 @@ import tempfile
 from django import forms
 from django.conf import settings
 from django.contrib.auth import get_user_model
+from django.contrib.auth.views import redirect_to_login
 from django.core.cache import cache
 from django.test import Client, TestCase, override_settings
 from django.urls import reverse
@@ -25,11 +26,11 @@ class TestViewsPosts(TestCase):
         cls.group = mixer.blend(Group)
         cls.post = mixer.blend(
             Post,
-            author=TestViewsPosts.user_author,
-            group=TestViewsPosts.group,
+            author=cls.user_author,
+            group=cls.group,
         )
         cls.authorized_client_author = Client()
-        cls.authorized_client_author.force_login(TestViewsPosts.user_author)
+        cls.authorized_client_author.force_login(cls.user_author)
 
     @classmethod
     def tearDownClass(cls) -> None:
@@ -66,7 +67,7 @@ class TestViewsPosts(TestCase):
     def test_group_list_context(self) -> None:
         """Проверка правильности контекста для group_list."""
         first_object = self.authorized_client_author.get(
-            reverse('posts:group_list', kwargs={'slug': self.group.slug}),
+            reverse('posts:group_list', args=(self.group.slug,)),
         ).context['page_obj'][0]
         self.correct_page_obj_first_obj(first_object)
 
@@ -74,7 +75,7 @@ class TestViewsPosts(TestCase):
             self.authorized_client_author.get(
                 reverse(
                     'posts:group_list',
-                    kwargs={'slug': self.group.slug},
+                    args=(self.group.slug,),
                 ),
             ).context['group'],
             self.group,
@@ -87,7 +88,7 @@ class TestViewsPosts(TestCase):
         first_object = self.authorized_client_author.get(
             reverse(
                 'posts:profile',
-                kwargs={'username': self.user_author.username},
+                args=(self.user_author.username,),
             ),
         ).context['page_obj'][0]
         self.correct_page_obj_first_obj(first_object)
@@ -95,7 +96,7 @@ class TestViewsPosts(TestCase):
             self.authorized_client_author.get(
                 reverse(
                     'posts:profile',
-                    kwargs={'username': self.user_author.username},
+                    args=(self.user_author.username,),
                 ),
             ).context['author'],
             self.user_author,
@@ -105,7 +106,7 @@ class TestViewsPosts(TestCase):
             self.authorized_client_author.get(
                 reverse(
                     'posts:profile',
-                    kwargs={'username': self.user_author.username},
+                    args=(self.user_author.username,),
                 ),
             ).context['following'],
             False,
@@ -115,10 +116,68 @@ class TestViewsPosts(TestCase):
             follower_authorized_client.get(
                 reverse(
                     'posts:profile',
-                    kwargs={'username': self.user_author.username},
+                    args=(self.user_author.username,),
                 ),
             ).context['following'],
             False,
+        )
+
+    def test_follow_usage(self) -> None:
+        """Проверка возможности подписки/отписки для разных клиентов."""
+        user, user_client = mixer.blend(User), Client()
+        user_client.force_login(user=user)
+
+        user_client.get(
+            reverse('posts:profile_follow', args=(self.user_author.username,)),
+        )
+        self.assertEqual(
+            Follow.objects.filter(
+                author__following__user=user, author=self.user_author,
+            ).exists(),
+            True,
+        )
+        user_client.get(
+            reverse('posts:profile_follow', args=(self.user_author.username,)),
+        )
+        self.assertEqual(
+            Follow.objects.filter(
+                author__following__user=user, author=self.user_author,
+            ).count(),
+            1,
+        )
+        user_client.get(
+            reverse(
+                'posts:profile_unfollow', args=(self.user_author.username,),
+            ),
+        )
+        self.assertEqual(
+            Follow.objects.filter(
+                author__following__user=user, author=self.user_author,
+            ).exists(),
+            False,
+        )
+
+        self.authorized_client_author.get(
+            reverse('posts:profile_follow', args=(self.user_author.username,)),
+        )
+        self.assertEqual(
+            Follow.objects.filter(
+                author__following__user=user, author=self.user_author,
+            ).exists(),
+            False,
+        )
+
+        self.assertRedirects(
+            self.client.get(
+                reverse(
+                    'posts:profile_follow', args=(self.user_author.username,),
+                ),
+            ),
+            redirect_to_login(
+                next=reverse(
+                    'posts:profile_follow', args=(self.user_author.username,),
+                ),
+            ).url,
         )
 
     def test_post_detail(self) -> None:
@@ -126,7 +185,7 @@ class TestViewsPosts(TestCase):
         context = self.authorized_client_author.get(
             reverse(
                 'posts:post_detail',
-                kwargs={'pk': self.post.pk},
+                args=(self.post.pk,),
             ),
         ).context['post']
         self.correct_page_obj_first_obj(context)
@@ -167,12 +226,12 @@ class TestViewsPosts(TestCase):
     def test_post_edit(self) -> None:
         """Проверка правильности контекста для post_edit."""
         form = self.authorized_client_author.get(
-            reverse('posts:post_edit', kwargs={'pk': self.post.pk}),
+            reverse('posts:post_edit', args=(self.post.pk,)),
         ).context['form']
         self.correct_fields_post_form(form)
         self.assertEqual(
             self.authorized_client_author.get(
-                reverse('posts:post_edit', kwargs={'pk': self.post.pk}),
+                reverse('posts:post_edit', args=(self.post.pk,)),
             ).context['is_edit'],
             True,
         )
@@ -185,11 +244,11 @@ class TestViewsPosts(TestCase):
             'index': reverse('posts:index'),
             'profile': reverse(
                 'posts:profile',
-                kwargs={'username': self.user_author.username},
+                args=(self.user_author.username,),
             ),
             'group_list': reverse(
                 'posts:group_list',
-                kwargs={'slug': self.group.slug},
+                args=(self.group.slug,),
             ),
         }
         for value in response.values():
@@ -208,7 +267,7 @@ class TestViewsPosts(TestCase):
                     self.authorized_client_author.get(
                         reverse(
                             'posts:group_list',
-                            kwargs={'slug': extra_group.slug},
+                            args=(extra_group.slug,),
                         ),
                     )
                 ).context['page_obj'],
@@ -224,19 +283,22 @@ class TestViewsPosts(TestCase):
         response = self.authorized_client_author.post(
             reverse(
                 'posts:add_comment',
-                kwargs={'pk': self.post.pk},
+                args=(self.post.pk,),
             ),
             data=form_data,
         )
         self.assertRedirects(
             response,
-            reverse('posts:post_detail', kwargs={'pk': self.post.pk}),
+            reverse(
+                'posts:post_detail',
+                args=(self.post.pk,),
+            ),
         )
         self.assertEqual(
             self.authorized_client_author.get(
                 reverse(
                     'posts:post_detail',
-                    kwargs={'pk': self.post.pk},
+                    args=(self.post.pk,),
                 ),
             ).context['comments'][0],
             Comment.objects.get(
@@ -244,44 +306,4 @@ class TestViewsPosts(TestCase):
                 text=form_data['text'],
                 post=self.post.pk,
             ),
-        )
-
-    def test_follow(self) -> None:
-        """Проверка возможности подписки и отписки."""
-        follower_user = mixer.blend(User)
-        follower_user_client = Client()
-        follower_user_client.force_login(user=follower_user)
-        self.assertEqual(
-            Follow.objects.filter(
-                author=self.user_author,
-                user=follower_user,
-            ).exists(),
-            False,
-        )
-        follower_user_client.get(
-            reverse(
-                'posts:profile_follow',
-                kwargs={'username': self.user_author.username},
-            ),
-        )
-        self.assertEqual(
-            Follow.objects.filter(
-                author=self.user_author,
-                user=follower_user,
-            ).exists(),
-            True,
-        )
-
-        follower_user_client.get(
-            reverse(
-                'posts:profile_unfollow',
-                kwargs={'username': self.user_author.username},
-            ),
-        )
-        self.assertEqual(
-            Follow.objects.filter(
-                user=follower_user,
-                author=self.user_author,
-            ).exists(),
-            False,
         )

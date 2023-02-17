@@ -2,13 +2,15 @@ from io import BytesIO
 
 from django.core.files.uploadedfile import SimpleUploadedFile
 from PIL import Image
+from faker import Faker
 
 
-def image(name: str = 'giffy.gif') -> SimpleUploadedFile:
+def image() -> SimpleUploadedFile:
+    name = Faker().bothify(text='????.gif')
     file = BytesIO()
-    image = Image.new('RGBA', size=(50, 50), color=(155, 0, 0))
-    image.save(file, 'png')
-    file.name = 'test.png'
+    image = Image.new('RGBA', size=(1, 1), color=(155, 0, 0))
+    image.save(file, 'gif')
+    file.name = name
     file.seek(0)
     return SimpleUploadedFile(
         name=name,

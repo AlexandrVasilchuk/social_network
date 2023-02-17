@@ -24,6 +24,7 @@ ALLOWED_HOSTS = [
 INTERNAL_IPS = [
     '127.0.0.1',
 ]
+
 # fmt: off
 INSTALLED_APPS = [
     'django.contrib.admin',
@@ -33,6 +34,7 @@ INSTALLED_APPS = [
     'django.contrib.messages',
     'django.contrib.staticfiles',
 
+    'behaviors.apps.BehaviorsConfig',
     'sorl.thumbnail',
 
     'about.apps.AboutConfig',
@@ -41,6 +43,7 @@ INSTALLED_APPS = [
     'users.apps.UsersConfig',
 ]
 # fmt: on
+
 MIDDLEWARE = [
     'django.middleware.security.SecurityMiddleware',
     'django.contrib.sessions.middleware.SessionMiddleware',
