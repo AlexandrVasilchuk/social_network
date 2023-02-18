@@ -1,6 +1,7 @@
 from django.test import TestCase
 from mixer.backend.django import mixer
-from posts.models import Comment, Follow, Group, POST_SYMBOLS_LIMITATION, Post
+
+from posts.models import POST_SYMBOLS_LIMITATION, Comment, Follow, Group, Post
 
 
 class PostModelTest(TestCase):

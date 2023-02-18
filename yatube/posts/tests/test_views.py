@@ -130,29 +130,32 @@ class TestViewsPosts(TestCase):
         user_client.get(
             reverse('posts:profile_follow', args=(self.user_author.username,)),
         )
-        self.assertEqual(
+        self.assertTrue(
             Follow.objects.filter(
-                author__following__user=user, author=self.user_author,
+                author__following__user=user,
+                author=self.user_author,
             ).exists(),
-            True,
         )
         user_client.get(
             reverse('posts:profile_follow', args=(self.user_author.username,)),
         )
         self.assertEqual(
             Follow.objects.filter(
-                author__following__user=user, author=self.user_author,
+                author__following__user=user,
+                author=self.user_author,
             ).count(),
             1,
         )
         user_client.get(
             reverse(
-                'posts:profile_unfollow', args=(self.user_author.username,),
+                'posts:profile_unfollow',
+                args=(self.user_author.username,),
             ),
         )
         self.assertEqual(
             Follow.objects.filter(
-                author__following__user=user, author=self.user_author,
+                author__following__user=user,
+                author=self.user_author,
             ).exists(),
             False,
         )
@@ -162,7 +165,8 @@ class TestViewsPosts(TestCase):
         )
         self.assertEqual(
             Follow.objects.filter(
-                author__following__user=user, author=self.user_author,
+                author__following__user=user,
+                author=self.user_author,
             ).exists(),
             False,
         )
@@ -170,12 +174,14 @@ class TestViewsPosts(TestCase):
         self.assertRedirects(
             self.client.get(
                 reverse(
-                    'posts:profile_follow', args=(self.user_author.username,),
+                    'posts:profile_follow',
+                    args=(self.user_author.username,),
                 ),
             ),
             redirect_to_login(
                 next=reverse(
-                    'posts:profile_follow', args=(self.user_author.username,),
+                    'posts:profile_follow',
+                    args=(self.user_author.username,),
                 ),
             ).url,
         )
@@ -229,17 +235,16 @@ class TestViewsPosts(TestCase):
             reverse('posts:post_edit', args=(self.post.pk,)),
         ).context['form']
         self.correct_fields_post_form(form)
-        self.assertEqual(
+        self.assertTrue(
             self.authorized_client_author.get(
                 reverse('posts:post_edit', args=(self.post.pk,)),
             ).context['is_edit'],
-            True,
         )
 
     def test_extra_check(self) -> None:
         """Проверка, что уникальный пост попадает на нужные страницы."""
         extra_group = mixer.blend(Group)
-        self.assertEqual(Post.objects.filter(pk=self.post.pk).exists(), True)
+        self.assertTrue(Post.objects.filter(pk=self.post.pk).exists())
         response = {
             'index': reverse('posts:index'),
             'profile': reverse(

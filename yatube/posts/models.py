@@ -1,13 +1,14 @@
 from django.contrib.auth import get_user_model
 from django.db import models
-from yatube.models import TimestampedModel, DefaultModel
+
+from yatube.models import DefaultModel, TimestampedModel
 
 User = get_user_model()
 
 POST_SYMBOLS_LIMITATION = 15
 
 
-class AbstractedModel(TimestampedModel):
+class AuthorCreatedModel(TimestampedModel):
     """Абстрактная модель. Добавляет дату создания и текст."""
 
     author = models.ForeignKey(
@@ -38,7 +39,7 @@ class Group(DefaultModel):
         return self.title
 
 
-class Post(AbstractedModel):
+class Post(AuthorCreatedModel):
 
     group = models.ForeignKey(
         Group,
@@ -53,7 +54,7 @@ class Post(AbstractedModel):
         blank=True,
     )
 
-    class Meta(AbstractedModel.Meta):
+    class Meta(AuthorCreatedModel.Meta):
         verbose_name = 'пост'
         verbose_name_plural = 'посты'
         default_related_name = 'posts'
@@ -62,13 +63,13 @@ class Post(AbstractedModel):
         return self.text[:POST_SYMBOLS_LIMITATION]
 
 
-class Comment(AbstractedModel):
+class Comment(AuthorCreatedModel):
     post = models.ForeignKey(
         Post,
         on_delete=models.CASCADE,
     )
 
-    class Meta(AbstractedModel.Meta):
+    class Meta(AuthorCreatedModel.Meta):
         verbose_name = 'комментарий'
         verbose_name_plural = 'комментарии'
         default_related_name = 'comments'
@@ -91,7 +92,10 @@ class Follow(DefaultModel):
     class Meta:
         constraints = [
             models.UniqueConstraint(
-                fields=['user', 'author'],
+                fields=(
+                    'user',
+                    'author',
+                ),
                 name='unique_author',
             ),
         ]

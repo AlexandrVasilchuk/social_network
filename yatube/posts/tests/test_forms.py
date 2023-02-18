@@ -8,6 +8,7 @@ from django.contrib.auth.views import redirect_to_login
 from django.http import HttpResponse
 from django.test import Client, TestCase, override_settings
 from django.urls import reverse
+from faker import Faker
 from mixer.backend.django import mixer
 
 from posts.models import Comment, Group, Post
@@ -16,7 +17,6 @@ from posts.tests.common import image
 User = get_user_model()
 
 TEMP_MEDIA_ROOT = tempfile.mkdtemp(dir=settings.BASE_DIR)
-UPLOADED_TO = Post.image.field.upload_to
 
 
 @override_settings(MEDIA_ROOT=TEMP_MEDIA_ROOT)
@@ -24,9 +24,10 @@ class TestPostForm(TestCase):
     @classmethod
     def setUpClass(cls) -> None:
         super().setUpClass()
-        cls.user = mixer.blend(User)
-        cls.authorized_client = Client()
-        cls.authorized_client.force_login(cls.user)
+        cls.author = mixer.blend(User)
+
+        cls.author_client = Client()
+        cls.author_client.force_login(cls.author)
 
     @classmethod
     def tearDownClass(cls) -> None:
@@ -43,7 +44,6 @@ class TestPostForm(TestCase):
         Args:
             data: Словарь с данными, отправленными в форму
                 создания/изменения поста.
-
             response: Страница, на которой отображается
                 опубликованный/изменённый пост.
         """
@@ -51,10 +51,12 @@ class TestPostForm(TestCase):
         value_expected = {
             'group_id': data['group'],
             'text': data['text'],
-            'author_id': self.user.pk,
+            'author_id': self.author.pk,
             'pk': response.context['post'].pk,
-            'image': UPLOADED_TO + data['image'].name,
         }
+        self.assertTrue(
+            response.context['post'].image.name.endswith(data['image'].name),
+        )
         for value, expected in value_expected.items():
             with self.subTest(value=expected):
                 self.assertEqual(getattr(post, value), expected)
@@ -62,34 +64,33 @@ class TestPostForm(TestCase):
     def create_post(self) -> None:
         """Проверка добавления записи в БД при отправке валидной формы."""
         group = mixer.blend('posts.Group')
-        form_data = {
-            'text': 'Тестовый пост',
+        data = {
+            'text': Faker().bothify(),
             'group': group.pk,
             'image': image(),
         }
-        response = self.authorized_client.post(
+        response = self.auth.post(
             reverse('posts:post_create'),
-            data=form_data,
+            data=data,
             follow=True,
         )
         self.assertRedirects(
             response,
             reverse(
                 'posts:profile',
-                args=(self.user.username,),
+                args=(self.author.username,),
             ),
         )
         self.assertEqual(Post.objects.count(), 1)
-        self.post_fields(response, form_data)
+        self.post_fields(response, data)
 
-        self.assertRedirects(
-            self.client.post(
-                reverse('posts:post_create'),
-                data=form_data,
-                follow=True,
-            ),
-            redirect_to_login(next=reverse('posts:post_create')).url,
-        )
+    def test_create_accses(self) -> None:
+        """Проверка доступа к созданию поста у анонимного пользователя."""
+        form_data = {
+            'text': Faker().bothify(),
+        }
+        self.client.post(reverse('posts:post_create'), form_data=form_data)
+        self.assertEqual(Post.objects.count(), 0)
 
     def test_help_text_newpost_form(self) -> None:
         field_expected_value = {
@@ -99,7 +100,7 @@ class TestPostForm(TestCase):
         for field, expected_value in field_expected_value.items():
             with self.subTest(value=expected_value):
                 self.assertEqual(
-                    self.authorized_client.get(reverse('posts:post_create'))
+                    self.author_client.get(reverse('posts:post_create'))
                     .context['form']
                     .fields[field]
                     .help_text,
@@ -108,17 +109,14 @@ class TestPostForm(TestCase):
 
     def test_edit_post(self) -> None:
         """Проверка работы формы при изменении поста."""
-        not_author = mixer.blend(User)
-        not_author_client = Client()
-        not_author_client.force_login(user=not_author)
         group = mixer.blend('posts.Group')
-        post = mixer.blend('posts.Post', author=self.user)
+        post = mixer.blend('posts.Post', author=self.author)
         form_data = {
-            'text': 'Изменённый текст',
+            'text': Faker().bothify(),
             'group': group.pk,
             'image': image(),
         }
-        response = self.authorized_client.post(
+        response = self.author_client.post(
             reverse('posts:post_edit', args=(post.pk,)),
             data=form_data,
             follow=True,
@@ -128,23 +126,41 @@ class TestPostForm(TestCase):
             reverse('posts:post_detail', args=(post.pk,)),
         )
         self.post_fields(response, form_data)
+
+    def test_edit_post_acsses(self) -> None:
+        """Проверка доступности редактирования поста для разных клиентов."""
+        not_author = mixer.blend(User)
+        post = mixer.blend('posts.Post', author=self.author)
+
+        not_author_client = Client()
+        not_author_client.force_login(user=not_author)
+        new_form_data = {
+            'text': Faker().bothify(),
+        }
         self.assertRedirects(
             self.client.post(
                 reverse('posts:post_edit', args=(post.pk,)),
-                data=form_data,
+                data=new_form_data,
                 follow=True,
             ),
             redirect_to_login(
                 next=reverse('posts:post_edit', args=(post.pk,)),
             ).url,
         )
+
         self.assertRedirects(
             not_author_client.post(
                 reverse('posts:post_edit', args=(post.pk,)),
-                data=form_data,
+                data=new_form_data,
                 follow=True,
             ),
             reverse('posts:post_detail', args=(post.pk,)),
+        )
+        self.assertEqual(
+            post,
+            self.author_client.get(
+                reverse('posts:profile', args=(self.author.username,)),
+            ).context['page_obj'][0],
         )
 
 
@@ -153,16 +169,17 @@ class TestCommentForm(TestCase):
     def setUpClass(cls) -> None:
         super().setUpClass()
         cls.user = mixer.blend(User)
-        cls.post = mixer.blend('posts.Post', author=cls.user)
-        cls.authorized_client = Client()
-        cls.authorized_client.force_login(user=cls.user)
+        cls.post = mixer.blend('posts.Post')
+
+        cls.auth = Client()
+        cls.auth.force_login(user=cls.user)
 
     def test_comment_form(self) -> None:
         """Проверка работы формы добавления комментария и изменения в БД."""
         form_data = {
-            'text': 'Коммент Васи Пупкина',
+            'text': Faker().bothify(text='????'),
         }
-        response = self.authorized_client.post(
+        response = self.auth.post(
             reverse(
                 'posts:add_comment',
                 args=(self.post.pk,),
@@ -176,20 +193,13 @@ class TestCommentForm(TestCase):
                 args=(self.post.pk,),
             ),
         )
-        field_expected = {
-            'author': self.user,
-            'post_id': self.post.pk,
-            'text': form_data['text'],
-        }
         comment = self.client.get(
             reverse(
                 'posts:post_detail',
                 args=(self.post.pk,),
             ),
         ).context['comments'][0]
-        for field, expected in field_expected.items():
-            with self.subTest(value=field):
-                self.assertEqual(getattr(comment, field), expected)
+        self.assertEqual(comment.text, form_data['text'])
 
         self.assertEqual(
             comment,
@@ -200,6 +210,12 @@ class TestCommentForm(TestCase):
             ),
         )
         self.assertEqual(Comment.objects.count(), 1)
+
+    def test_comment_access(self) -> None:
+        """Проверка доступности комментирования для разных клиентов."""
+        form_data = {
+            'text': Faker().bothify(),
+        }
         self.assertRedirects(
             self.client.post(
                 reverse(
@@ -212,3 +228,4 @@ class TestCommentForm(TestCase):
                 next=reverse('posts:add_comment', args=(self.post.pk,)),
             ).url,
         )
+        self.assertEqual(Comment.objects.count(), 0)

@@ -5,7 +5,8 @@ from django.shortcuts import render
 
 
 def page_not_found(
-    request: HttpRequest, exception: HttpResponseNotFound,
+    request: HttpRequest,
+    exception: HttpResponseNotFound,
 ) -> HttpResponse:
     del exception
     return render(

@@ -48,7 +48,6 @@ def group_posts(request: HttpRequest, slug: str) -> HttpResponse:
 
 def profile(request: HttpRequest, username: str) -> HttpResponse:
     author = get_object_or_404(User, username=username)
-    user = request.user
     return render(
         request,
         'posts/profile.html',
@@ -61,8 +60,8 @@ def profile(request: HttpRequest, username: str) -> HttpResponse:
             ),
             'author': author,
             'following': bool(
-                user.is_authenticated
-                and author.following.filter(user=user).exists(),
+                request.user.is_authenticated
+                and author.following.filter(user=request.user).exists(),
             ),
         },
     )
@@ -159,10 +158,9 @@ def follow_index(request: HttpRequest) -> HttpResponse:
 @login_required
 def profile_follow(request: HttpRequest, username: str) -> HttpResponse:
     author = get_object_or_404(User, username=username)
-    user = request.user
-    if user != author:
+    if request.user != author:
         Follow.objects.get_or_create(
-            user=user,
+            user=request.user,
             author=author,
         )
     return redirect('posts:follow_index')
@@ -171,7 +169,6 @@ def profile_follow(request: HttpRequest, username: str) -> HttpResponse:
 @login_required
 def profile_unfollow(request: HttpRequest, username: str) -> HttpResponse:
     get_object_or_404(
-        Follow.objects.filter(author__following__user=request.user),
-        author__username=username,
+        Follow, user=request.user, author__username=username,
     ).delete()
     return redirect('posts:follow_index')
