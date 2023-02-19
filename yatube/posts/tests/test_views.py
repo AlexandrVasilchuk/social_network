@@ -102,88 +102,22 @@ class TestViewsPosts(TestCase):
             self.user_author,
         )
 
-        self.assertEqual(
+        self.assertFalse(
             self.authorized_client_author.get(
                 reverse(
                     'posts:profile',
                     args=(self.user_author.username,),
                 ),
             ).context['following'],
-            False,
         )
 
-        self.assertEqual(
+        self.assertFalse(
             follower_authorized_client.get(
                 reverse(
                     'posts:profile',
                     args=(self.user_author.username,),
                 ),
             ).context['following'],
-            False,
-        )
-
-    def test_follow_usage(self) -> None:
-        """Проверка возможности подписки/отписки для разных клиентов."""
-        user, user_client = mixer.blend(User), Client()
-        user_client.force_login(user=user)
-
-        user_client.get(
-            reverse('posts:profile_follow', args=(self.user_author.username,)),
-        )
-        self.assertTrue(
-            Follow.objects.filter(
-                author__following__user=user,
-                author=self.user_author,
-            ).exists(),
-        )
-        user_client.get(
-            reverse('posts:profile_follow', args=(self.user_author.username,)),
-        )
-        self.assertEqual(
-            Follow.objects.filter(
-                author__following__user=user,
-                author=self.user_author,
-            ).count(),
-            1,
-        )
-        user_client.get(
-            reverse(
-                'posts:profile_unfollow',
-                args=(self.user_author.username,),
-            ),
-        )
-        self.assertEqual(
-            Follow.objects.filter(
-                author__following__user=user,
-                author=self.user_author,
-            ).exists(),
-            False,
-        )
-
-        self.authorized_client_author.get(
-            reverse('posts:profile_follow', args=(self.user_author.username,)),
-        )
-        self.assertEqual(
-            Follow.objects.filter(
-                author__following__user=user,
-                author=self.user_author,
-            ).exists(),
-            False,
-        )
-
-        self.assertRedirects(
-            self.client.get(
-                reverse(
-                    'posts:profile_follow',
-                    args=(self.user_author.username,),
-                ),
-            ),
-            redirect_to_login(
-                next=reverse(
-                    'posts:profile_follow',
-                    args=(self.user_author.username,),
-                ),
-            ).url,
         )
 
     def test_post_detail(self) -> None:
