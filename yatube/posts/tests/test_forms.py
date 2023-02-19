@@ -4,7 +4,6 @@ from typing import Dict, Union
 
 from django.conf import settings
 from django.contrib.auth import get_user_model
-from django.contrib.auth.views import redirect_to_login
 from django.http import HttpResponse
 from django.test import Client, TestCase, override_settings
 from django.urls import reverse
@@ -180,7 +179,7 @@ class TestCommentForm(TestCase):
                 опубликованный/изменённый пост.
         """
         comment = self.client.get(
-            reverse('posts:post_detail', args=(self.post.pk,))
+            reverse('posts:post_detail', args=(self.post.pk,)),
         ).context['comments'][0]
         value_expected = {
             'text': data['text'],

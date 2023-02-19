@@ -4,7 +4,6 @@ import tempfile
 from django import forms
 from django.conf import settings
 from django.contrib.auth import get_user_model
-from django.contrib.auth.views import redirect_to_login
 from django.core.cache import cache
 from django.test import Client, TestCase, override_settings
 from django.urls import reverse
