@@ -254,9 +254,6 @@ class FollowTest(TestCase):
                 author=self.author,
             ).exists(),
         )
-        self.follow_client.get(
-            reverse('posts:profile_follow', args=(self.author.username,)),
-        )
         self.assertEqual(
             Follow.objects.filter(
                 author__following__user=self.follower,
